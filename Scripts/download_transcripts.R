@@ -6,6 +6,7 @@ library(swissparl)
 library(tidytext)
 # ?tidytext
 library(rlang)
+library(furrr)
 
 # check package content --------------------------------------------------
 
@@ -70,26 +71,74 @@ saveRDS(businesses, "Data/businesses_2015_2025.rds")
 # für alle Geschäfte, die im Parlament von 2015-2025 behandelt wurden,
 # sind auch Geschäfte nötig, die bereits vor 2015 eingereicht wurden.
 
-# get transcripts --------------------------------------------------------
+# get subject businesses --------------------------------------------------------
 
-subject_businesses_list <- list()
-for (i in seq_along(businesses$BusinessShortNumber)) {
-  subject_businesses_list[[i]] <- get_data(
+# with for loop
+
+# subject_businesses_list <- list()
+# # for (i in seq_along(businesses$BusinessShortNumber)) {
+# for (i in 637:length(businesses$BusinessShortNumber)) {
+#   subject_businesses_list[[i]] <- get_data(
+#     table = "SubjectBusiness",
+#     BusinessShortNumber = businesses$BusinessShortNumber[i],
+#     Language = "DE"
+#   )
+#   paste(
+#     "item",
+#     businesses$BusinessShortNumber[i],
+#     "of",
+#     length(businesses$BusinessShortNumber),
+#     "done"
+#   ) |>
+#     print()
+# }
+
+# subject_businesses <- bind_rows(subject_businesses_list)
+# saveRDS(subject_businesses, "Data/subject_businesses_2015_2025.rds")
+
+# with walk
+
+get_subject_business <- function(bsn) {
+  folder <- "Data/subject_businesses"
+  # folder <- "Data/subject_businesses_parallel"
+  if (!dir.exists(folder)) {
+    dir.create(folder)
+  }
+
+  dt <- get_data(
     table = "SubjectBusiness",
-    BusinessShortNumber = businesses$BusinessShortNumber[i],
+    BusinessShortNumber = bsn,
     Language = "DE"
   )
-  paste(
-    "item",
-    businesses$BusinessShortNumber[i],
-    "of",
-    length(businesses$BusinessShortNumber),
-    "done"
-  ) |>
-    print()
+
+  saveRDS(dt, file.path(folder, paste0(bsn, ".rds")))
 }
-subject_businesses <- bind_rows(subject_businesses_list)
+
+# walk(
+#   businesses$BusinessShortNumber,
+#   get_subject_business,
+#   .progress = TRUE
+# )
+
+plan(multisession, workers = 6)
+future_walk(
+  businesses$BusinessShortNumber,
+  get_subject_business,
+  .progress = TRUE
+)
+
+subject_businesses <- map_dfr(
+  list.files("subject_businesses", full.names = TRUE),
+  readRDS
+)
 saveRDS(subject_businesses, "Data/subject_businesses_2015_2025.rds")
+
+# clean the dataset
+# we just want the subjects that have discussions in the parliament
+
+# get the transcripts ----------------------------------------------------
+
+# with for loop
 
 transcripts_list <- list()
 for (i in seq_along(subject_businesses$IdSubject)) {
@@ -109,6 +158,37 @@ for (i in seq_along(subject_businesses$IdSubject)) {
 }
 transcripts <- bind_rows(transcripts_list)
 saveRDS(transcripts, "Data/transcripts_energy.rds")
+
+# with walk
+
+get_transcripts <- function(bsn) {
+  folder <- "Data/subject_businesses"
+  # folder <- "Data/subject_businesses_parallel"
+  if (!dir.exists(folder)) {
+    dir.create(folder)
+  }
+
+  dt <- get_data(
+    table = "SubjectBusiness",
+    BusinessShortNumber = bsn,
+    Language = "DE"
+  )
+
+  saveRDS(dt, file.path(folder, paste0(bsn, ".rds")))
+}
+
+plan(multisession, workers = 6)
+future_walk(
+  businesses$BusinessShortNumber,
+  get_subject_business,
+  .progress = TRUE
+)
+
+subject_businesses <- map_dfr(
+  list.files("subject_businesses", full.names = TRUE),
+  readRDS
+)
+saveRDS(subject_businesses, "Data/subject_businesses_2015_2025.rds")
 
 # get transcripts per business -------------------------------
 
