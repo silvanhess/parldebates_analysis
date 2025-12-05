@@ -1,0 +1,51 @@
+# libraries --------------------------------------------------------------
+
+library(tidyverse)
+library(swissparl)
+# ?swissparl
+library(tidytext)
+# ?tidytext
+library(rlang)
+
+# functions --------------------------------------------------------------
+
+clean_transcripts <- function(
+  df,
+  text_col = "Text",
+  id_col = "ID",
+  date_col = "MeetingDate",
+  oid_col = "MeetingVerbalixOid"
+) {
+  # Convert column names to symbols for tidy evaluation
+  text <- rlang::sym(text_col)
+  id <- rlang::sym(id_col)
+  date <- rlang::sym(date_col)
+  oid <- rlang::sym(oid_col)
+
+  df |>
+    mutate(
+      CleanText = str_remove_all(!!text, "<.*?>"), # remove HTML
+      CleanText = str_squish(CleanText) # normalize whitespace
+    ) |>
+    unnest_tokens(
+      output = CleanText,
+      input = CleanText,
+      token = "sentences"
+    ) |>
+    filter(
+      nchar(CleanText) > 100, # filter short sentences
+    ) |>
+    select(
+      !!id,
+      !!date,
+      !!oid,
+      CleanText
+    )
+}
+
+# clean transcripts ------------------------------------------------------
+
+transcripts_latest_session_clean <- clean_transcripts(
+  transcripts_latest_session
+)
+transcripts_energy_clean <- clean_transcripts(transcripts_energy)
