@@ -12,41 +12,37 @@ library(future)
 # set up parallel --------------------------------------------------------
 
 # set up parallel processing with background R sessions
-plan(multisession, workers = 6)
+# adjust number of workers as needed
+# default: 6 for subject_business and 4 for transcripts
+plan(multisession, workers = 4)
 
 # check package content --------------------------------------------------
 
-# get_tables()
-# overview <- get_overview()
-# overview |> filter(variable == "IdSession")
-# get_variables("Subject")
-# sample_subjects <- get_glimpse("Subject", rows = 100)
-# get_variables("SubjectBusiness")
-# sample_subjectbusiness <- get_glimpse("SubjectBusiness", rows = 100)
-# get_variables("Business")
-# sample_business <- get_glimpse("Business", rows = 100)
-# get_variables("Session")
-# sample_sessions <- get_glimpse("Session", rows = 100)
-# get_variables("Meeting")
-# sample_meetings <- get_glimpse("Meeting", rows = 100)
-# get_variables("Transcript")
-# sample_transcripts <- get_glimpse("Transcript", rows = 100)
-# get_variables("Session")
-# sample_sessions <- get_glimpse("Session", rows = 100)
+get_tables()
+overview <- get_overview()
+overview |> filter(variable == "IdSession")
+get_variables("Subject")
+sample_subjects <- get_glimpse("Subject", rows = 100)
+get_variables("SubjectBusiness")
+sample_subjectbusiness <- get_glimpse("SubjectBusiness", rows = 100)
+get_variables("Business")
+sample_business <- get_glimpse("Business", rows = 100)
+get_variables("Session")
+sample_sessions <- get_glimpse("Session", rows = 100)
+get_variables("Meeting")
+sample_meetings <- get_glimpse("Meeting", rows = 100)
+get_variables("Transcript")
+sample_transcripts <- get_glimpse("Transcript", rows = 100)
+get_variables("Session")
+sample_sessions <- get_glimpse("Session", rows = 100)
 
-# ?get_data
+?get_data
 
 # tests ------------------------------------------------------------------
 
 # business_25041 <- get_data(
 #   "Business",
 #   BusinessShortNumber = "25.041",
-#   Language = "DE"
-# )
-
-# sessions <- get_data(
-#   "Session",
-#   StartDate = c(">2015-01-01"),
 #   Language = "DE"
 # )
 
@@ -101,7 +97,11 @@ walk(
 businesses <- map_dfr(list.files("Data/businesses", full.names = T), readRDS)
 saveRDS(businesses, "Data/businesses_2015_2025.rds")
 
-# Nur Geschäfte, welche im Parlament behandelt wurden
+businesses <- readRDS("Data/businesses_2015_2025.rds")
+
+# Filter businesses -----------------------------------------
+
+# Nur Geschäftsarten, welche im Parlament behandelt wurden
 # Aschliessen: Anfrage, Dringliche Anfrage, Petition, Interpellation, Fragestunde
 
 # count business types
@@ -110,13 +110,38 @@ businesses |>
   arrange(n) |>
   print(n = Inf)
 
-# filter business types
+# Nur Geschäfte im Status, wo sie im Parlament behandelt wurden
+
+# show status
+businesses_filtered |>
+  count(BusinessStatus, BusinessStatusText) |>
+  arrange(n) |>
+  print(n = Inf)
+
+# Apply filters
 businesses_filtered <- businesses |>
-  filter(!(BusinessType %in% c(18, 19, 10, 8, 14)))
+  filter(
+    !(BusinessType %in% c(18, 19, 10, 8, 14)),
+    BusinessStatus %in% c(219, 222, 232, 229, 218, 215, 220)
+  ) |>
+  distinct(ID, .keep_all = TRUE)
+
+# # check
+# businesses_filtered |>
+#   count(BusinessType, BusinessTypeName) |>
+#   arrange(n) |>
+#   print(n = Inf)
+
+# businesses_filtered |>
+#   count(BusinessStatus, BusinessStatusText) |>
+#   arrange(n) |>
+#   print(n = Inf)
 
 saveRDS(businesses_filtered, "Data/businesses_filtered_2015_2025.rds")
 
 # get subject businesses --------------------------------------------------------
+
+businesses_filtered <- readRDS("Data/businesses_filtered_2015_2025.rds")
 
 # with walk
 
@@ -143,22 +168,22 @@ get_subject_business <- function(bsn, retries = 5, wait = 3) {
 
     if (!inherits(result, "try-error")) {
       saveRDS(result, out_file)
-      message("Downloaded ", bsn, " (attempt ", attempt, ")")
+      # message("Downloaded ", bsn, " (attempt ", attempt, ")")
       return(TRUE)
     }
 
-    message("Error on ", bsn, " (attempt ", attempt, "): ", result)
+    # message("Error on ", bsn, " (attempt ", attempt, "): ", result)
     Sys.sleep(wait * attempt) # exponential backoff
   }
 
-  message("FAILED permanently: ", bsn)
+  # message("FAILED permanently: ", bsn)
   write(bsn, file = "failed_ids.txt", append = TRUE)
   return(FALSE)
 }
 
 # Start parallel jobs
 fut <- future_walk(
-  businesses$BusinessShortNumber,
+  businesses_filtered$BusinessShortNumber,
   get_subject_business,
   .progress = TRUE
 )
@@ -172,7 +197,33 @@ subject_businesses <- map_dfr(
 )
 saveRDS(subject_businesses, "Data/subject_businesses_2015_2025.rds")
 
+# check results in SubjectBusiness ---------------------------------------
+
+# businesses_filtered |> distinct(BusinessShortNumber)
+# subject_businesses |> distinct(BusinessShortNumber)
+# # some businesses have no entries in SubjectBusiness
+# # this is because some businesses have no discussion in the councils
+
+# # # show be which businesses are missing
+# missing_bsn <- setdiff(
+#   businesses_filtered$BusinessShortNumber,
+#   subject_businesses$BusinessShortNumber
+# )
+# length(missing_bsn)
+
+# # check whether businesses really have no entries in SubjectBusiness
+# get_data(
+#   table = "SubjectBusiness",
+#   BusinessShortNumber = missing_bsn$BusinessShortNumber[1],
+#   Language = "DE"
+# )
+
+# businesses_lost <- businesses_filtered |> filter(BusinessShortNumber %in% missing_bsn)
+# businesses_lost |> count(BusinessType, BusinessTypeName)
+
 # get the transcripts ----------------------------------------------------
+
+subject_businesses <- readRDS("Data/subject_businesses_2015_2025.rds")
 
 # with walk
 
@@ -191,7 +242,7 @@ get_transcripts <- function(sbj, retries = 5, wait = 3) {
     result <- try(
       get_data(
         table = "Transcript",
-        IdSubject = sbj,
+        IdSubject = as.double(sbj),
         Language = "DE"
       ),
       silent = TRUE
@@ -199,18 +250,24 @@ get_transcripts <- function(sbj, retries = 5, wait = 3) {
 
     if (!inherits(result, "try-error")) {
       saveRDS(result, out_file)
-      message("Downloaded ", sbj, " (attempt ", attempt, ")")
+      # message("Downloaded ", sbj, " (attempt ", attempt, ")")
       return(TRUE)
     }
 
-    message("Error on ", sbj, " (attempt ", attempt, "): ", result)
+    # message("Error on ", sbj, " (attempt ", attempt, "): ", result)
     Sys.sleep(wait * attempt) # exponential backoff
   }
 
-  message("FAILED permanently: ", sbj)
+  # message("FAILED permanently: ", sbj)
   write(sbj, file = "failed_ids.txt", append = TRUE)
   return(FALSE)
 }
+
+# walk(
+#   subject_businesses$IdSubject,
+#   get_transcripts,
+#   .progress = TRUE
+# )
 
 fut <- future_walk(
   subject_businesses$IdSubject,
@@ -226,6 +283,41 @@ transcripts <- map_dfr(
 )
 saveRDS(transcripts, "Data/transcripts.rds")
 
-# filter transcripts:
-# only debates after 1.1.2025
-# debates around climate change
+# # check if all transcripts are there
+# subject_businesses |> distinct(IdSubject)
+# transcripts |> distinct(IdSubject)
+
+# inspect transcripts table ----------------------------------------------
+
+transcripts |> count(SpeakerFunction) |> arrange(n)
+transcripts |> filter(is.na(SpeakerFunction)) |> pull(Text) |> sample(10)
+transcripts |> filter(SpeakerFunction == "P-M") |> pull(Text) |> sample(10)
+
+# Frühjahrsession 2015 und neuer
+sessions <- get_data(
+  "Session",
+  StartDate = c(">2015-01-01"),
+  Language = "DE"
+)
+
+# keine Kommissionssdebatten
+transcripts |> count(CouncilId, CouncilName)
+transcripts |> count(MeetingCouncilAbbreviation)
+
+# kein italienisch
+transcripts |> count(LanguageOfText) |> arrange(n)
+
+# transcripts |> filter(is.na(LanguageOfText)) |> pull(Text) |> sample(10)
+# transcripts |> filter(!is.na(LanguageOfText)) |> pull(Text) |> sample(10)
+
+# filter transcripts -----------------------------------------------------
+
+transcripts_filtered <- transcripts |>
+  filter(
+    IdSession >= 4917,
+    # CouncilId %in% c(1, 2),
+    # SpeakerFunction %in% c("Mit-F", "Mit-M", "P-F", "P-M"),
+    LanguageOfText != "IT"
+  )
+
+saveRDS(transcripts_filtered, "Data/transcripts_filtered.rds")

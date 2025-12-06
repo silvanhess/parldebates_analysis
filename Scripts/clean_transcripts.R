@@ -30,22 +30,37 @@ clean_transcripts <- function(
     unnest_tokens(
       output = CleanText,
       input = CleanText,
-      token = "sentences"
-    ) |>
-    filter(
-      nchar(CleanText) > 100, # filter short sentences
-    ) |>
-    select(
-      !!id,
-      !!date,
-      !!oid,
-      CleanText
-    )
+      token = "paragraphs"
+    ) #|>
+  # filter(
+  #   nchar(CleanText) > 100, # filter short sentences
+  # ) |>
+  # rename()
+  # select(
+  #   !!id,
+  #   !!date,
+  #   !!oid,
+  #   CleanText
+  # )
 }
 
 # clean transcripts ------------------------------------------------------
 
-transcripts_latest_session_clean <- clean_transcripts(
-  transcripts_latest_session
+transcripts <- readRDS("Data/transcripts_filtered.rds")
+
+transcripts_cleaned <- clean_transcripts(
+  transcripts_filtered
 )
-transcripts_energy_clean <- clean_transcripts(transcripts_energy)
+
+# tests ------------------------------------------------------------------
+
+df <- transcripts_cleaned |>
+  mutate(TextLength = nchar(CleanText))
+
+df$TextLength
+
+# plot distribution of text lengths
+ggplot(df, aes(x = TextLength)) +
+  geom_histogram(binwidth = 1000) +
+  # limit x scale to 10000
+  xlim(0, 10000)
