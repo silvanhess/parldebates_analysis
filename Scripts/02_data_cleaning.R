@@ -78,7 +78,7 @@ transcripts_cleaned <- transcripts_filtered |>
   mutate(
     paragraph = str_extract_all(Text, "(?<=<p>)(.*?)(?=</p>)")
   ) |>
-  unnest(paragraph) %>%
+  unnest(paragraph) |>
   mutate(
     paragraph = paragraph |>
       str_replace_all("\\[PAGE \\d+\\]", "") |> # pagination entfernen

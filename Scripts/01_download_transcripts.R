@@ -61,7 +61,7 @@ yr = 2010:2025
 
 # with walk
 
-get_businesses_year <- function(yr) {
+get_businesses <- function(yr) {
   folder <- "Data/businesses"
   if (!dir.exists(folder)) {
     dir.create(folder)
@@ -86,16 +86,19 @@ get_businesses_year <- function(yr) {
 
 walk(
   yr,
-  get_businesses_year,
+  get_businesses,
   .progress = TRUE
 )
 
-businesses <- map_dfr(list.files("Data/businesses", full.names = T), readRDS)
+businesses <- map_dfr(
+  list.files("Data/businesses", full.names = T),
+  readRDS
+)
 saveRDS(businesses, "Data/businesses_2015_2025.rds")
 
-businesses <- readRDS("Data/businesses_2015_2025.rds")
-
 # Filter businesses -----------------------------------------
+
+businesses <- readRDS("Data/businesses_2015_2025.rds")
 
 # Nur Geschäftsarten, welche im Parlament behandelt wurden
 # Aschliessen: Anfrage, Dringliche Anfrage, Petition, Interpellation, Fragestunde
@@ -195,17 +198,19 @@ saveRDS(subject_businesses, "Data/subject_businesses_2015_2025.rds")
 
 # check results in SubjectBusiness ---------------------------------------
 
-# businesses_filtered |> distinct(BusinessShortNumber)
-# subject_businesses |> distinct(BusinessShortNumber)
-# # some businesses have no entries in SubjectBusiness
-# # this is because some businesses have no discussion in the councils
+subject_businesses <- readRDS("Data/subject_businesses_2015_2025.rds")
 
-# # # show be which businesses are missing
-# missing_bsn <- setdiff(
-#   businesses_filtered$BusinessShortNumber,
-#   subject_businesses$BusinessShortNumber
-# )
-# length(missing_bsn)
+businesses_filtered |> distinct(BusinessShortNumber)
+subject_businesses |> distinct(BusinessShortNumber)
+# some businesses have no entries in SubjectBusiness
+# this is because some businesses have no discussion in the councils
+
+# show be which businesses are missing
+missing_bsn <- setdiff(
+  businesses_filtered$BusinessShortNumber,
+  subject_businesses$BusinessShortNumber
+)
+paste(length(missing_bsn), "businesses have no entries in SubjectBusiness.")
 
 # # check whether businesses really have no entries in SubjectBusiness
 # get_data(
@@ -216,6 +221,11 @@ saveRDS(subject_businesses, "Data/subject_businesses_2015_2025.rds")
 
 # businesses_lost <- businesses_filtered |> filter(BusinessShortNumber %in% missing_bsn)
 # businesses_lost |> count(BusinessType, BusinessTypeName)
+
+# analyze businesses
+
+business_names <- subject_businesses |> distinct(BusinessShortNumber, Title)
+
 
 # get the transcripts ----------------------------------------------------
 
