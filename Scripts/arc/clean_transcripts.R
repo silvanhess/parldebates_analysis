@@ -51,16 +51,3 @@ transcripts <- readRDS("Data/transcripts_filtered.rds")
 transcripts_cleaned <- clean_transcripts(
   transcripts_filtered
 )
-
-# tests ------------------------------------------------------------------
-
-df <- transcripts_cleaned |>
-  mutate(TextLength = nchar(CleanText))
-
-df$TextLength
-
-# plot distribution of text lengths
-ggplot(df, aes(x = TextLength)) +
-  geom_histogram(binwidth = 1000) +
-  # limit x scale to 10000
-  xlim(0, 10000)

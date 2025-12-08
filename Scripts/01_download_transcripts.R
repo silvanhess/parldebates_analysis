@@ -2,10 +2,6 @@
 
 library(tidyverse)
 library(swissparl)
-# ?swissparl
-library(tidytext)
-# ?tidytext
-library(rlang)
 library(furrr)
 library(future)
 
@@ -18,25 +14,25 @@ plan(multisession, workers = 4)
 
 # check package content --------------------------------------------------
 
-get_tables()
-overview <- get_overview()
-overview |> filter(variable == "IdSession")
-get_variables("Subject")
-sample_subjects <- get_glimpse("Subject", rows = 100)
-get_variables("SubjectBusiness")
-sample_subjectbusiness <- get_glimpse("SubjectBusiness", rows = 100)
-get_variables("Business")
-sample_business <- get_glimpse("Business", rows = 100)
-get_variables("Session")
-sample_sessions <- get_glimpse("Session", rows = 100)
-get_variables("Meeting")
-sample_meetings <- get_glimpse("Meeting", rows = 100)
-get_variables("Transcript")
-sample_transcripts <- get_glimpse("Transcript", rows = 100)
-get_variables("Session")
-sample_sessions <- get_glimpse("Session", rows = 100)
+# get_tables()
+# overview <- get_overview()
+# overview |> filter(variable == "IdSession")
+# get_variables("Subject")
+# sample_subjects <- get_glimpse("Subject", rows = 100)
+# get_variables("SubjectBusiness")
+# sample_subjectbusiness <- get_glimpse("SubjectBusiness", rows = 100)
+# get_variables("Business")
+# sample_business <- get_glimpse("Business", rows = 100)
+# get_variables("Session")
+# sample_sessions <- get_glimpse("Session", rows = 100)
+# get_variables("Meeting")
+# sample_meetings <- get_glimpse("Meeting", rows = 100)
+# get_variables("Transcript")
+# sample_transcripts <- get_glimpse("Transcript", rows = 100)
+# get_variables("Session")
+# sample_sessions <- get_glimpse("Session", rows = 100)
 
-?get_data
+# ?get_data
 
 # tests ------------------------------------------------------------------
 
@@ -286,38 +282,3 @@ saveRDS(transcripts, "Data/transcripts.rds")
 # # check if all transcripts are there
 # subject_businesses |> distinct(IdSubject)
 # transcripts |> distinct(IdSubject)
-
-# inspect transcripts table ----------------------------------------------
-
-transcripts |> count(SpeakerFunction) |> arrange(n)
-transcripts |> filter(is.na(SpeakerFunction)) |> pull(Text) |> sample(10)
-transcripts |> filter(SpeakerFunction == "P-M") |> pull(Text) |> sample(10)
-
-# Frühjahrsession 2015 und neuer
-sessions <- get_data(
-  "Session",
-  StartDate = c(">2015-01-01"),
-  Language = "DE"
-)
-
-# keine Kommissionssdebatten
-transcripts |> count(CouncilId, CouncilName)
-transcripts |> count(MeetingCouncilAbbreviation)
-
-# kein italienisch
-transcripts |> count(LanguageOfText) |> arrange(n)
-
-# transcripts |> filter(is.na(LanguageOfText)) |> pull(Text) |> sample(10)
-# transcripts |> filter(!is.na(LanguageOfText)) |> pull(Text) |> sample(10)
-
-# filter transcripts -----------------------------------------------------
-
-transcripts_filtered <- transcripts |>
-  filter(
-    IdSession >= 4917,
-    # CouncilId %in% c(1, 2),
-    # SpeakerFunction %in% c("Mit-F", "Mit-M", "P-F", "P-M"),
-    LanguageOfText != "IT"
-  )
-
-saveRDS(transcripts_filtered, "Data/transcripts_filtered.rds")
