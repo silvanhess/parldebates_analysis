@@ -53,8 +53,8 @@ plan(multisession, workers = 4)
 
 # get businesses -------------------------------------------
 
-# für alle Geschäfte, die im Parlament von 2015-2025 behandelt wurden,
-# sind auch Geschäfte nötig, die bereits vor 2015 eingereicht wurden.
+# für alle Geschäfte, die im Parlament von 2016-2025 behandelt wurden,
+# sind auch Geschäfte nötig, die bereits vor 2016 eingereicht wurden.
 # Daher werden hier alle Geschäfte von 2010-2025 heruntergeladen.
 
 yr = 2010:2025
@@ -94,11 +94,11 @@ businesses <- map_dfr(
   list.files("Data/businesses", full.names = T),
   readRDS
 )
-saveRDS(businesses, "Data/businesses_2015_2025.rds")
+saveRDS(businesses, "Data/businesses.rds")
 
 # Filter businesses -----------------------------------------
 
-businesses <- readRDS("Data/businesses_2015_2025.rds")
+businesses <- readRDS("Data/businesses.rds")
 
 # Nur Geschäftsarten, welche im Parlament behandelt wurden
 # Aschliessen: Anfrage, Dringliche Anfrage, Petition, Interpellation, Fragestunde
@@ -136,16 +136,16 @@ businesses_filtered <- businesses |>
 #   arrange(n) |>
 #   print(n = Inf)
 
-saveRDS(businesses_filtered, "Data/businesses_filtered_2015_2025.rds")
+saveRDS(businesses_filtered, "Data/businesses_filtered.rds")
 
 # get subject businesses --------------------------------------------------------
 
-businesses_filtered <- readRDS("Data/businesses_filtered_2015_2025.rds")
+businesses_filtered <- readRDS("Data/businesses_filtered.rds")
 
 # with walk
 
-get_subject_business <- function(bsn, retries = 5, wait = 3) {
-  folder <- "Data/subject_businesses"
+get_subjects <- function(bsn, retries = 5, wait = 3) {
+  folder <- "Data/subjects"
   if (!dir.exists(folder)) {
     dir.create(folder)
   }
@@ -183,32 +183,32 @@ get_subject_business <- function(bsn, retries = 5, wait = 3) {
 # Start parallel jobs
 fut <- future_walk(
   businesses_filtered$BusinessShortNumber,
-  get_subject_business,
+  get_subjects,
   .progress = TRUE
 )
 
 # WAIT UNTIL ALL JOBS ARE FINISHED
 value(fut)
 
-subject_businesses <- map_dfr(
-  list.files("Data/subject_businesses", full.names = TRUE),
+subjects <- map_dfr(
+  list.files("Data/subjects", full.names = TRUE),
   readRDS
 )
-saveRDS(subject_businesses, "Data/subject_businesses_2015_2025.rds")
+saveRDS(subjects, "Data/subjects.rds")
 
 # check results in SubjectBusiness ---------------------------------------
 
-subject_businesses <- readRDS("Data/subject_businesses_2015_2025.rds")
+subjects <- readRDS("Data/subjects.rds")
 
 businesses_filtered |> distinct(BusinessShortNumber)
-subject_businesses |> distinct(BusinessShortNumber)
+subjects |> distinct(BusinessShortNumber)
 # some businesses have no entries in SubjectBusiness
 # this is because some businesses have no discussion in the councils
 
 # show be which businesses are missing
 missing_bsn <- setdiff(
   businesses_filtered$BusinessShortNumber,
-  subject_businesses$BusinessShortNumber
+  subjects$BusinessShortNumber
 )
 paste(length(missing_bsn), "businesses have no entries in SubjectBusiness.")
 
@@ -224,12 +224,12 @@ paste(length(missing_bsn), "businesses have no entries in SubjectBusiness.")
 
 # analyze businesses
 
-business_names <- subject_businesses |> distinct(BusinessShortNumber, Title)
+business_names <- subjects |> distinct(BusinessShortNumber, Title)
 
 
 # get the transcripts ----------------------------------------------------
 
-subject_businesses <- readRDS("Data/subject_businesses_2015_2025.rds")
+subjects <- readRDS("Data/subjects_2015_2025.rds")
 
 # with walk
 
@@ -270,13 +270,13 @@ get_transcripts <- function(sbj, retries = 5, wait = 3) {
 }
 
 # walk(
-#   subject_businesses$IdSubject,
+#   subjects$IdSubject,
 #   get_transcripts,
 #   .progress = TRUE
 # )
 
 fut <- future_walk(
-  subject_businesses$IdSubject,
+  subjects$IdSubject,
   get_transcripts,
   .progress = TRUE
 )
@@ -290,5 +290,5 @@ transcripts <- map_dfr(
 saveRDS(transcripts, "Data/transcripts.rds")
 
 # # check if all transcripts are there
-# subject_businesses |> distinct(IdSubject)
+# subjects |> distinct(IdSubject)
 # transcripts |> distinct(IdSubject)
