@@ -1,11 +1,14 @@
 # libraries --------------------------------------------------------------
 
 library(tidyverse)
-library(swissparl)
+# library(swissparl)
+library(httr)
+library(jsonlite)
+library(dotenv)
 
 # create dataset for labeling --------------------------------------------
 
-transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
+transcripts_wide <- readRDS("Data/transcripts_wide.rds")
 
 # create a balanced dataset for labeling
 # 50% climate related, 50% not climate related
@@ -28,13 +31,51 @@ saveRDS(transcripts_sampled, "Data/transcripts_sampled.rds")
 
 transcripts_sampled <- readRDS("Data/transcripts_sampled.rds")
 
-# count characters in french
-french_characters <- transcripts_sampled |>
-  filter(LanguageOfText == "FR") |>
-  summarise(total_characters = sum(Textlength))
+# # count characters in french
+# transcripts_sampled |>
+#   filter(LanguageOfText == "FR") |>
+#   summarise(total_characters = sum(Textlength))
 
+# Load Deepl Credentials
+load_dot_env()
 
-# export to csv for labeling in doccano
+deepl_translate <- function(text, auth_key = Sys.getenv("DEEPL_API_KEY")) {
+  url <- "https://api.deepl.com/v2/translate"
+
+  response <- POST(
+    url,
+    body = list(
+      auth_key = auth_key,
+      text = text,
+      target_lang = "DE"
+    ),
+    encode = "form"
+  )
+
+  # error handling
+  if (response$status_code != 200) {
+    stop(
+      "DeepL API Fehler: ",
+      status_code(response),
+      " - ",
+      content(response, "text")
+    )
+  }
+
+  # parse
+  result <- content(response, as = "parsed")
+
+  # extract text
+  result$translations[[1]]$text
+}
+
+transcripts_sampled$paragraph_translated <- map_chr(
+  transcripts_sampled$paragraph,
+  deepl_translate,
+  .progress = TRUE
+)
+
+# export to csv for labeling in label-studio
 transcripts_sampled |>
-  select(ID, ClimateBusiness, LanguageOfText, paragraph) |>
+  select(ID, ClimateBusiness, LanguageOfText, paragraph_translated) |>
   write_csv("Data/handcoding_dataset.csv")

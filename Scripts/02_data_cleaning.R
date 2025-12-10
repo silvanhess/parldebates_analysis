@@ -51,26 +51,26 @@ transcripts_filtered <- transcripts |>
     # SpeakerFunction %in% c("Mit-F", "Mit-M")
   )
 
+# session_statistics <- transcripts_filtered |>
+#   group_by(IdSession) |>
+#   summarise(
+#     number_of_meetings = n_distinct(MeetingVerbalixOid),
+#     number_of_protocols = n_distinct(ID),
+#     number_of_businesses = n_distinct(IdSubject)
+#   )
+
+# meeting_statistics <- transcripts_filtered |>
+#   group_by(MeetingVerbalixOid) |>
+#   summarise(
+#     number_of_protocols = n_distinct(ID),
+#     number_of_businesses = n_distinct(IdSubject)
+#   )
+
 saveRDS(transcripts_filtered, "Data/transcripts_filtered.rds")
 
-# filtered data inspection -------------------------------------------------
-
-session_statistics <- transcripts_filtered |>
-  group_by(IdSession) |>
-  summarise(
-    number_of_meetings = n_distinct(MeetingVerbalixOid),
-    number_of_protocols = n_distinct(ID),
-    number_of_businesses = n_distinct(IdSubject)
-  )
-
-meeting_statistics <- transcripts_filtered |>
-  group_by(MeetingVerbalixOid) |>
-  summarise(
-    number_of_protocols = n_distinct(ID),
-    number_of_businesses = n_distinct(IdSubject)
-  )
-
 # find climate related businesses ----------------------------------------
+
+businesses_filtered <- readRDS("Data/businesses_filtered.rds")
 
 search_strings <- c(
   "CO2",
@@ -114,12 +114,27 @@ walk(
   .progress = TRUE
 )
 
-businesses_climate_en <- businesses_climate
 businesses_climate <- map_dfr(
   list.files("Data/businesses_climate", full.names = T),
   readRDS
 )
 saveRDS(businesses_climate, "Data/businesses_climate.rds")
+
+# Search climate businesses by filtering ---------------------------------
+
+# search business titles with any of the search strings
+businesses_climate <- businesses_filtered |>
+  filter(str_detect(Title, paste(search_strings, collapse = "|")))
+
+business_climate_old <- readRDS("Data/businesses_climate.rds")
+
+# show diff between old and new
+diff <- anti_join(
+  businesses_climate,
+  business_climate_old,
+  by = "BusinessShortNumber"
+)
+# --> go with old version
 
 # Tokenization and cleaning -----------------------------------------------
 
@@ -154,6 +169,10 @@ transcripts_cleaned <- transcripts_tokenized |>
     paragraph_id = row_number()
   ) |>
   ungroup() |>
+  filter(
+    !str_detect(paragraph, "\\[VS]"), # remove parapraphs with VS tags
+    !nchar(paragraph) < 50 # remove short paragraphs
+  ) |>
   mutate(
     paragraph = paragraph |>
       str_replace_all("\\[PAGE \\d+\\]", "") |> # remove pagination
@@ -166,14 +185,20 @@ transcripts_cleaned <- transcripts_tokenized |>
       FALSE
     ),
     ID = paste0(ID, "_", paragraph_id),
-    Textlength = nchar(paragraph)
-  ) |>
-  filter(
-    !str_detect(paragraph, "\\[VS]"), # remove parapraphs with VS tags
-    !nchar(paragraph) < 50 # remove short paragraphs
+    Textlength = nchar(paragraph),
+    MeetingId = as.character(MeetingVerbalixOid),
+    CouncilId = as.character(CouncilId),
+    CantonId = as.character(CantonId)
   ) |>
   select(
-    !c(VoteId, VoteBusinessNumber, VoteBusinessShortNumber, VoteBusinessTitle)
+    !c(
+      VoteId,
+      VoteBusinessNumber,
+      VoteBusinessShortNumber,
+      VoteBusinessTitle,
+      Type,
+      SortOrder
+    )
   )
 
 saveRDS(transcripts_cleaned, "Data/transcripts_cleaned.rds")
@@ -183,7 +208,7 @@ saveRDS(transcripts_cleaned, "Data/transcripts_cleaned.rds")
 transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
 # transcripts_cleaned |> pull(paragraph) |> sample(10)
 
-ggplot(transcripts_cleaned, aes(x = TextLength)) +
+ggplot(transcripts_cleaned, aes(x = Textlength)) +
   geom_histogram() +
   xlim(0, 2000)
 ggsave("Outputs/text_length_distribution.png")
@@ -228,17 +253,12 @@ transcripts_wide <- transcripts_long |>
     names_sep = "_"
   )
 
+# transcripts_wide |>
+#   count(PublishedNotes_1) |>
+#   arrange(desc(n))
+
+# transcripts_wide |>
+#   count(BusinessTypeName_1) |>
+#   arrange(desc(n))
+
 saveRDS(transcripts_wide, "Data/transcripts_wide.rds")
-
-
-# insepct transcripts wide -----------------------------------------------
-
-transcripts_wide <- readRDS("Data/transcripts_wide.rds")
-
-transcripts_wide |>
-  count(PublishedNotes_1) |>
-  arrange(desc(n))
-
-transcripts_wide |>
-  count(BusinessTypeName_1) |>
-  arrange(desc(n))
