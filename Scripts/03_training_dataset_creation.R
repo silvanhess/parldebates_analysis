@@ -15,10 +15,10 @@ transcripts_wide <- readRDS("Data/transcripts_wide.rds")
 # 50% german, 50% french
 # so 25% per group
 
-groups_before <- transcripts_cleaned |> count(ClimateBusiness, LanguageOfText)
+groups_before <- transcripts_wide |> count(ClimateBusiness, LanguageOfText)
 
 set.seed(1234)
-transcripts_sampled <- transcripts_cleaned |>
+transcripts_sampled <- transcripts_wide |>
   group_by(ClimateBusiness, LanguageOfText) |>
   slice_sample(n = 250) |>
   ungroup()
@@ -47,7 +47,7 @@ deepl_translate <- function(text, auth_key = Sys.getenv("DEEPL_API_KEY")) {
     body = list(
       auth_key = auth_key,
       text = text,
-      target_lang = "DE"
+      target_lang = "EN"
     ),
     encode = "form"
   )
@@ -75,7 +75,10 @@ transcripts_sampled$paragraph_translated <- map_chr(
   .progress = TRUE
 )
 
+handcoding_dataset <- transcripts_sampled |>
+  select(ID, ClimateBusiness, LanguageOfText, paragraph_translated)
+
+saveRDS(handcoding_dataset, "Data/handcoding_dataset.rds")
+
 # export to csv for labeling in label-studio
-transcripts_sampled |>
-  select(ID, ClimateBusiness, LanguageOfText, paragraph_translated) |>
-  write_csv("Data/handcoding_dataset.csv")
+write_csv(handcoding_dataset, "Data/handcoding_dataset.csv")

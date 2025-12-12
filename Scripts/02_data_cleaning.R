@@ -230,8 +230,7 @@ df <- businesses_filtered |>
     PublishedNotes
   )
 
-transcripts_long <- transcripts_cleaned
-left_join(df, by = join_by(IdSubject))
+transcripts_long <- left_join(transcripts_cleaned, df, by = join_by(IdSubject))
 
 # number_of_businesses_per_transcript <- transcripts_long |>
 #   count(ID) |>
