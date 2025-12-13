@@ -1,29 +1,44 @@
 # libraries --------------------------------------------------------------
 
 library(tidyverse)
-# library(swissparl)
 library(httr)
 library(jsonlite)
 library(dotenv)
 
 # create dataset for labeling --------------------------------------------
 
-transcripts_wide <- readRDS("Data/transcripts_wide.rds")
+transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
 
 # create a balanced dataset for labeling
-# 50% climate related, 50% not climate related
-# 50% german, 50% french
-# so 25% per group
+# for the initial training of the classifier we want to have
+# 1000 paragraphs labeled with an even distribution between french and german
+# also: we want to have both climate related and not climate related paragraphs
+# to achieve this, we will sample more paragraphs from businesses that have a
+# higher chance of having climate related paragraphs
+# final dataset should have:
 
-groups_before <- transcripts_wide |> count(ClimateBusiness, LanguageOfText)
+# 50/50 distribution between french and german
+# 70/30 distribution between Climate Businesses and not Climate Businesses
+
+groups_before <- transcripts_cleaned |>
+  count(ClimateBusiness, LanguageOfText) |>
+  mutate(percentage = n / sum(n) * 100)
 
 set.seed(1234)
-transcripts_sampled <- transcripts_wide |>
-  group_by(ClimateBusiness, LanguageOfText) |>
-  slice_sample(n = 250) |>
-  ungroup()
+transcripts_sampled <- transcripts_cleaned |>
+  mutate(
+    cb_weight = if_else(ClimateBusiness == TRUE, 10, 1),
+    lang_weight = if_else(LanguageOfText == "FR", 3, 1),
+    weight = cb_weight * lang_weight
+  ) |>
+  slice_sample(
+    n = 1000,
+    weight_by = weight
+  )
 
-groups_after <- transcripts_sampled |> count(ClimateBusiness, LanguageOfText)
+groups_after <- transcripts_sampled |>
+  count(ClimateBusiness, LanguageOfText) |>
+  mutate(percentage = n / sum(n) * 100)
 
 saveRDS(transcripts_sampled, "Data/transcripts_sampled.rds")
 

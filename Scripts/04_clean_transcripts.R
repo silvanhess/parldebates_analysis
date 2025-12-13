@@ -1,7 +1,6 @@
 # libraries --------------------------------------------------------------
 
 library(tidyverse)
-library(swissparl)
 library(tidytext)
 
 # inspect transcripts table ----------------------------------------------
@@ -68,79 +67,14 @@ transcripts_filtered <- transcripts |>
 
 saveRDS(transcripts_filtered, "Data/transcripts_filtered.rds")
 
-# find climate related businesses ----------------------------------------
-
-businesses_filtered <- readRDS("Data/businesses_filtered.rds")
-
-search_strings <- c(
-  "CO2",
-  "Erneuerbare",
-  "Heizung",
-  "Klimafonds",
-  "Solar",
-  "Treibhaus",
-  "Wärmepumpe",
-  "Wasserkraft",
-  "Windkraft",
-  "Emissionshandel",
-  "Energieeffizienz",
-  "Energiespeicher",
-  "Elektromobilität"
-)
-
-get_businesses <- function(search_strings) {
-  folder <- "Data/businesses_climate"
-  if (!dir.exists(folder)) {
-    dir.create(folder)
-  }
-
-  out_file <- file.path(folder, paste0(search_strings, ".rds"))
-  if (file.exists(out_file)) {
-    return(NULL)
-  } # skip existing files
-
-  dt <- get_data(
-    table = "Business",
-    Title = paste0("~", search_strings),
-    Language = "DE"
-  )
-
-  saveRDS(dt, file.path(folder, paste0(search_strings, ".rds")))
-}
-
-walk(
-  search_strings,
-  get_businesses,
-  .progress = TRUE
-)
-
-businesses_climate <- map_dfr(
-  list.files("Data/businesses_climate", full.names = T),
-  readRDS
-)
-saveRDS(businesses_climate, "Data/businesses_climate.rds")
-
-# Search climate businesses by filtering ---------------------------------
-
-# search business titles with any of the search strings
-businesses_climate <- businesses_filtered |>
-  filter(str_detect(Title, paste(search_strings, collapse = "|")))
-
-business_climate_old <- readRDS("Data/businesses_climate.rds")
-
-# show diff between old and new
-diff <- anti_join(
-  businesses_climate,
-  business_climate_old,
-  by = "BusinessShortNumber"
-)
-# --> go with old version
-
 # Tokenization and cleaning -----------------------------------------------
 
-transcripts_filtered <- readRDS("Data/transcripts_filtered.rds")
+businesses_cleaned <- readRDS("Data/businesses_cleaned.rds")
 subjects <- readRDS("Data/subjects.rds")
-businesses_climate <- readRDS("Data/businesses_climate.rds")
+transcripts_filtered <- readRDS("Data/transcripts_filtered.rds")
+
+businesses_climate <- businesses_cleaned |>
+  filter(ClimateBusiness == TRUE)
 
 subjects_climate <- subjects |>
   filter(BusinessShortNumber %in% businesses_climate$BusinessShortNumber)
@@ -170,14 +104,14 @@ transcripts_cleaned <- transcripts_tokenized |>
   ) |>
   ungroup() |>
   filter(
-    !str_detect(paragraph, "\\[VS]"), # remove parapraphs with VS tags
+    !str_detect(paragraph, "\\[VS]"), # remove parapraphs with VS (Vorsitzender) tags
     !nchar(paragraph) < 50 # remove short paragraphs
   ) |>
   mutate(
     paragraph = paragraph |>
       str_replace_all("\\[PAGE \\d+\\]", "") |> # remove pagination
       str_replace_all("<[^>]+>", "") |> # remove HTML tags for italics and bold etc.
-      str_replace_all("\\[GZ]", "") |> # remove [GZ] tags
+      str_replace_all("\\[GZ]", "") |> # remove [GZ] tags (Grosse Zäsur)
       str_squish(),
     ClimateBusiness = if_else(
       IdSubject %in% subjects_climate$IdSubject,
@@ -203,7 +137,7 @@ transcripts_cleaned <- transcripts_tokenized |>
 
 saveRDS(transcripts_cleaned, "Data/transcripts_cleaned.rds")
 
-# insepct data ------------------------------------------------------------------
+# plot data ------------------------------------------------------------------
 
 transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
 # transcripts_cleaned |> pull(paragraph) |> sample(10)
@@ -212,52 +146,3 @@ ggplot(transcripts_cleaned, aes(x = Textlength)) +
   geom_histogram() +
   xlim(0, 2000)
 ggsave("Outputs/text_length_distribution.png")
-
-# join business info -----------------------------------------------------
-
-transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
-businesses_filtered <- readRDS("Data/businesses_filtered.rds")
-subjects <- readRDS("Data/subjects.rds")
-
-df <- businesses_filtered |>
-  distinct(BusinessShortNumber, Title, BusinessTypeName) |>
-  left_join(subjects) |>
-  select(
-    IdSubject,
-    BusinessShortNumber,
-    Title,
-    BusinessTypeName,
-    PublishedNotes
-  )
-
-transcripts_long <- left_join(transcripts_cleaned, df, by = join_by(IdSubject))
-
-# number_of_businesses_per_transcript <- transcripts_long |>
-#   count(ID) |>
-#   arrange(desc(n))
-
-# pivot_wider
-transcripts_wide <- transcripts_long |>
-  group_by(ID) |>
-  mutate(business_number = row_number()) |>
-  ungroup() |>
-  pivot_wider(
-    names_from = business_number,
-    values_from = c(
-      BusinessShortNumber,
-      Title,
-      BusinessTypeName,
-      PublishedNotes
-    ),
-    names_sep = "_"
-  )
-
-# transcripts_wide |>
-#   count(PublishedNotes_1) |>
-#   arrange(desc(n))
-
-# transcripts_wide |>
-#   count(BusinessTypeName_1) |>
-#   arrange(desc(n))
-
-saveRDS(transcripts_wide, "Data/transcripts_wide.rds")

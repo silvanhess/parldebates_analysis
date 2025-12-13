@@ -12,137 +12,9 @@ library(future)
 # default: 6 for subject_business and 4 for transcripts
 plan(multisession, workers = 4)
 
-# check package content --------------------------------------------------
-
-# get_tables()
-# overview <- get_overview()
-# overview |> filter(variable == "IdSession")
-# get_variables("Subject")
-# sample_subjects <- get_glimpse("Subject", rows = 100)
-# get_variables("SubjectBusiness")
-# sample_subjectbusiness <- get_glimpse("SubjectBusiness", rows = 100)
-# get_variables("Business")
-# sample_business <- get_glimpse("Business", rows = 100)
-# get_variables("Session")
-# sample_sessions <- get_glimpse("Session", rows = 100)
-# get_variables("Meeting")
-# sample_meetings <- get_glimpse("Meeting", rows = 100)
-# get_variables("Transcript")
-# sample_transcripts <- get_glimpse("Transcript", rows = 100)
-# get_variables("Session")
-# sample_sessions <- get_glimpse("Session", rows = 100)
-
-# ?get_data
-
-# tests ------------------------------------------------------------------
-
-# business_25041 <- get_data(
-#   "Business",
-#   BusinessShortNumber = "25.041",
-#   Language = "DE"
-# )
-
-# businesses_2014 <- get_data(
-#   "Business",
-#   # SubmissionCouncil = "1", # fails
-#   # SubmissionSession = as.character(sessions$ID[1]), # fails
-#   SubmissionDate = c(">2014-01-01", "<2014-12-31"),
-#   # SubmissionDate = c(paste(">", year[1], "-01-01", sep = ""), paste("<", year[1], "-12-31", sep = "")),
-#   Language = "DE"
-# )
-
-# get businesses -------------------------------------------
-
-# für alle Geschäfte, die im Parlament von 2016-2025 behandelt wurden,
-# sind auch Geschäfte nötig, die bereits vor 2016 eingereicht wurden.
-# Daher werden hier alle Geschäfte von 2010-2025 heruntergeladen.
-
-yr = 2010:2025
-
-# with walk
-
-get_businesses <- function(yr) {
-  folder <- "Data/businesses"
-  if (!dir.exists(folder)) {
-    dir.create(folder)
-  }
-
-  out_file <- file.path(folder, paste0(yr, ".rds"))
-  if (file.exists(out_file)) {
-    return(NULL)
-  } # skip existing files
-
-  dt <- get_data(
-    "Business",
-    SubmissionDate = c(
-      paste(">", yr, "-01-01", sep = ""),
-      paste("<", yr, "-12-31", sep = "")
-    ),
-    Language = "DE"
-  )
-
-  saveRDS(dt, file.path(folder, paste0(yr, ".rds")))
-}
-
-walk(
-  yr,
-  get_businesses,
-  .progress = TRUE
-)
-
-businesses <- map_dfr(
-  list.files("Data/businesses", full.names = T),
-  readRDS
-)
-saveRDS(businesses, "Data/businesses.rds")
-
-# Filter businesses -----------------------------------------
-
-businesses <- readRDS("Data/businesses.rds")
-
-# Nur Geschäftsarten, welche im Parlament behandelt wurden
-# Aschliessen: Anfrage, Dringliche Anfrage, Petition, Interpellation, Fragestunde
-
-# count business types
-businesses |>
-  count(BusinessType, BusinessTypeName) |>
-  arrange(n) |>
-  print(n = Inf)
-
-# Nur Geschäfte im Status, wo sie im Parlament behandelt wurden
-
-# show status
-businesses_filtered |>
-  count(BusinessStatus, BusinessStatusText) |>
-  arrange(n) |>
-  print(n = Inf)
-
-# Apply filters
-businesses_filtered <- businesses |>
-  filter(
-    !(BusinessType %in% c(18, 19, 10, 8, 14)),
-    BusinessStatus %in% c(219, 222, 232, 229, 218, 215, 220)
-  ) |>
-  distinct(ID, .keep_all = TRUE)
-
-# # check
-# businesses_filtered |>
-#   count(BusinessType, BusinessTypeName) |>
-#   arrange(n) |>
-#   print(n = Inf)
-
-# businesses_filtered |>
-#   count(BusinessStatus, BusinessStatusText) |>
-#   arrange(n) |>
-#   print(n = Inf)
-
-saveRDS(businesses_filtered, "Data/businesses_filtered.rds")
-
 # get subject businesses --------------------------------------------------------
 
-businesses_filtered <- readRDS("Data/businesses_filtered.rds")
-
-# with walk
+businesses_cleaned <- readRDS("Data/businesses_cleaned.rds")
 
 get_subjects <- function(bsn, retries = 5, wait = 3) {
   folder <- "Data/subjects"
@@ -182,7 +54,7 @@ get_subjects <- function(bsn, retries = 5, wait = 3) {
 
 # Start parallel jobs
 fut <- future_walk(
-  businesses_filtered$BusinessShortNumber,
+  businesses_cleaned$BusinessShortNumber,
   get_subjects,
   .progress = TRUE
 )
@@ -200,14 +72,14 @@ saveRDS(subjects, "Data/subjects.rds")
 
 subjects <- readRDS("Data/subjects.rds")
 
-businesses_filtered |> distinct(BusinessShortNumber)
+businesses_cleaned |> distinct(BusinessShortNumber)
 subjects |> distinct(BusinessShortNumber)
 # some businesses have no entries in SubjectBusiness
 # this is because some businesses have no discussion in the councils
 
 # show be which businesses are missing
 missing_bsn <- setdiff(
-  businesses_filtered$BusinessShortNumber,
+  businesses_cleaned$BusinessShortNumber,
   subjects$BusinessShortNumber
 )
 paste(length(missing_bsn), "businesses have no entries in SubjectBusiness.")
@@ -219,19 +91,15 @@ paste(length(missing_bsn), "businesses have no entries in SubjectBusiness.")
 #   Language = "DE"
 # )
 
-# businesses_lost <- businesses_filtered |> filter(BusinessShortNumber %in% missing_bsn)
+# businesses_lost <- businesses_cleaned |> filter(BusinessShortNumber %in% missing_bsn)
 # businesses_lost |> count(BusinessType, BusinessTypeName)
 
-# analyze businesses
-
-business_names <- subjects |> distinct(BusinessShortNumber, Title)
-
+# # analyze businesses
+# business_names <- subjects |> distinct(BusinessShortNumber, Title)
 
 # get the transcripts ----------------------------------------------------
 
 subjects <- readRDS("Data/subjects_2015_2025.rds")
-
-# with walk
 
 get_transcripts <- function(sbj, retries = 5, wait = 3) {
   folder <- "Data/transcripts"
