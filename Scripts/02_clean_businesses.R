@@ -24,6 +24,13 @@ businesses <- readRDS("Data/businesses.rds")
 #   count(Tags, TagNames) |>
 #   print(n = Inf)
 
+# # analyze Verkehr
+# businesses |>
+#   filter(str_detect(TagNames, "Verkehr")) |>
+#   count(Title) |>
+#   arrange(desc(n)) |>
+#   print(n = Inf)
+
 # Clean businesses -----------------------------------------
 
 businesses_cleaned <- businesses |>

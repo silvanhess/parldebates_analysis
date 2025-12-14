@@ -144,5 +144,57 @@ transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
 
 ggplot(transcripts_cleaned, aes(x = Textlength)) +
   geom_histogram() +
-  xlim(0, 2000)
-ggsave("Outputs/text_length_distribution.png")
+  xlim(0, 2000) +
+  theme_minimal() +
+  labs(
+    x = "Paragraph Length (in characters)",
+    y = "Number of Paragraphs",
+    title = "Distribution of Paragraph Lengths in Complete Dataset"
+  )
+ggsave("Outputs/transcripts_cleaned_text_length.png")
+
+df <- transcripts_cleaned |>
+  group_by(LanguageOfText) |>
+  summarise(
+    number_of_paragraphs = n(),
+    pct_paragraphs = number_of_paragraphs / nrow(transcripts_cleaned)
+  )
+
+ggplot(df, aes(x = LanguageOfText, y = pct_paragraphs)) +
+  geom_col() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    x = "Language of Paragraphs",
+    y = "Percentage of Paragraphs",
+    title = "Distribution of Languages in Complete Dataset"
+  ) +
+  theme_minimal() +
+  # label the columns with the number of paragraphs
+  geom_text(
+    aes(label = paste(number_of_paragraphs, "paragraphs")),
+    vjust = -0.5
+  )
+ggsave("Outputs/transcripts_cleaned_language_distribution.png")
+
+df <- transcripts_cleaned |>
+  group_by(ClimateBusiness) |>
+  summarise(
+    number_of_paragraphs = n(),
+    pct_paragraphs = number_of_paragraphs / nrow(transcripts_cleaned)
+  )
+
+ggplot(df, aes(x = ClimateBusiness, y = pct_paragraphs)) +
+  geom_col() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    x = "Energy, Transport or Environment Related Paragraphs",
+    y = "Percentage of Paragraphs",
+    title = "Distribution of Climate Related Paragraphs in Complete Dataset"
+  ) +
+  theme_minimal() +
+  # label the columns with the number of paragraphs
+  geom_text(
+    aes(label = paste(number_of_paragraphs, "paragraphs")),
+    vjust = -0.5
+  )
+ggsave("Outputs/transcripts_cleaned_topic_distribution.png")

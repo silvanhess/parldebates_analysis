@@ -97,3 +97,65 @@ saveRDS(handcoding_dataset, "Data/handcoding_dataset.rds")
 
 # export to csv for labeling in label-studio
 write_csv(handcoding_dataset, "Data/handcoding_dataset.csv")
+
+# plot data ------------------------------------------------------------------
+
+transcripts_sampled <- readRDS("Data/transcripts_sampled.rds")
+# transcripts_cleaned |> pull(paragraph) |> sample(10)
+
+ggplot(transcripts_sampled, aes(x = Textlength)) +
+  geom_histogram() +
+  xlim(0, 2000) +
+  theme_minimal() +
+  labs(
+    x = "Paragraph Length (in characters)",
+    y = "Number of Paragraphs",
+    title = "Distribution of Paragraph Lengths in Handcoding Dataset"
+  )
+ggsave("Outputs/transcripts_sampled_text_length.png")
+
+df <- transcripts_sampled |>
+  group_by(LanguageOfText) |>
+  summarise(
+    number_of_paragraphs = n(),
+    pct_paragraphs = number_of_paragraphs / nrow(transcripts_sampled)
+  )
+
+ggplot(df, aes(x = LanguageOfText, y = pct_paragraphs)) +
+  geom_col() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    x = "Language of Paragraphs",
+    y = "Percentage of Paragraphs",
+    title = "Distribution of Languages in Handcoding Dataset"
+  ) +
+  theme_minimal() +
+  # label the columns with the number of paragraphs
+  geom_text(
+    aes(label = paste(number_of_paragraphs, "paragraphs")),
+    vjust = -0.5
+  )
+ggsave("Outputs/transcripts_sampled_language_distribution.png")
+
+df <- transcripts_sampled |>
+  group_by(ClimateBusiness) |>
+  summarise(
+    number_of_paragraphs = n(),
+    pct_paragraphs = number_of_paragraphs / nrow(transcripts_sampled)
+  )
+
+ggplot(df, aes(x = ClimateBusiness, y = pct_paragraphs)) +
+  geom_col() +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    x = "Energy, Transport or Environment Related Paragraphs",
+    y = "Percentage of Paragraphs",
+    title = "Distribution of Climate Related Paragraphs in Handcoding Dataset"
+  ) +
+  theme_minimal() +
+  # label the columns with the number of paragraphs
+  geom_text(
+    aes(label = paste(number_of_paragraphs, "paragraphs")),
+    vjust = -0.5
+  )
+ggsave("Outputs/transcripts_sampled_topic_distribution.png")
