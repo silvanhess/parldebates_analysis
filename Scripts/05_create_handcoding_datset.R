@@ -20,9 +20,9 @@ transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
 # 50/50 distribution between french and german
 # 70/30 distribution between Climate Businesses and not Climate Businesses
 
-groups_before <- transcripts_cleaned |>
-  count(ClimateBusiness, LanguageOfText) |>
-  mutate(percentage = n / sum(n) * 100)
+# groups_before <- transcripts_cleaned |>
+#   count(ClimateBusiness, LanguageOfText) |>
+#   mutate(percentage = n / sum(n) * 100)
 
 set.seed(1234)
 transcripts_sampled <- transcripts_cleaned |>
@@ -36,9 +36,9 @@ transcripts_sampled <- transcripts_cleaned |>
     weight_by = weight
   )
 
-groups_after <- transcripts_sampled |>
-  count(ClimateBusiness, LanguageOfText) |>
-  mutate(percentage = n / sum(n) * 100)
+# groups_after <- transcripts_sampled |>
+#   count(ClimateBusiness, LanguageOfText) |>
+#   mutate(percentage = n / sum(n) * 100)
 
 saveRDS(transcripts_sampled, "Data/transcripts_sampled.rds")
 
@@ -91,9 +91,13 @@ transcripts_sampled$paragraph_translated <- map_chr(
 )
 
 handcoding_dataset <- transcripts_sampled |>
-  select(ID, ClimateBusiness, LanguageOfText, paragraph_translated)
+  select(ID, ClimateBusiness, LanguageOfText, paragraph, paragraph_translated)
 
-saveRDS(handcoding_dataset, "Data/handcoding_dataset.rds")
+# handcoding_dataset <- readRDS("Data/handcoding_dataset.rds")
+# transcripts_sampled <- readRDS("Data/transcripts_sampled.rds")
+# handcoding_dataset <- inner_join(handcoding_dataset, transcripts_sampled, by = join_by(ID)) |> 
+#   select(ID, ClimateBusiness.x, LanguageOfText.x, paragraph, paragraph_translated) |> 
+#     rename(ClimateBusiness = ClimateBusiness.x, LanguageOfText = LanguageOfText.x)
 
 # export to csv for labeling in label-studio
 write_csv(handcoding_dataset, "Data/handcoding_dataset.csv")

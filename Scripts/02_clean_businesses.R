@@ -4,7 +4,7 @@ library(tidyverse)
 
 # analyze businesses -----------------------------------------------------
 
-businesses <- readRDS("Data/businesses.rds")
+# businesses <- readRDS("Data/businesses.rds")
 
 # # analyze business types
 # businesses |>
@@ -13,7 +13,7 @@ businesses <- readRDS("Data/businesses.rds")
 #   print(n = Inf)
 
 # # analyze business status
-# businesses_filtered |>
+# businesses |>
 #   count(BusinessStatus, BusinessStatusText) |>
 #   arrange(n) |>
 #   print(n = Inf)
@@ -44,3 +44,15 @@ businesses_cleaned <- businesses |>
   )
 
 saveRDS(businesses_cleaned, "Data/businesses_cleaned.rds")
+
+# # analyze cleaned businesses ---------------------------------------------
+
+# businesses_cleaned <- readRDS("Data/businesses_cleaned.rds")
+
+# # what tags are most common in Climate Businesses?
+# businesses_cleaned |>
+#   filter(ClimateBusiness == TRUE) |>
+#   separate_rows(Tags, TagNames, sep = "\\|") |>
+#   count(Tags, TagNames) |>
+#   arrange(desc(n)) |>
+#   print(n = Inf)

@@ -3,9 +3,9 @@
 library(tidyverse)
 library(tidytext)
 
-# inspect transcripts table ----------------------------------------------
+# filter transcripts -----------------------------------------------------
 
-# transcripts <- readRDS("Data/transcripts.rds")
+transcripts <- readRDS("Data/transcripts.rds")
 
 # sessions <- get_data(
 #   "Session",
@@ -36,18 +36,26 @@ library(tidytext)
 # # check Votes
 # transcripts |> filter(!is.na(VoteBusinessNumber)) |> pull(Text) |> sample(10) # kann raus
 
-# filter transcripts -----------------------------------------------------
+# # check VS tags
+# vorsitzender <- transcripts |> 
+#   filter(
+#     str_detect(Text, "\\[VS]")
+#   )
+# # diese Transkript sind für die Analyse des Inhalts nicht von Interesse
+# # diese werden daher aus dem Datensatz entfernt
 
-transcripts <- readRDS("Data/transcripts.rds")
+# italienisch <- transcripts |> 
+#   filter(LanguageOfText == "IT")
+# keine italienischen Texte, da nur ca. 1% der Texte
 
 transcripts_filtered <- transcripts |>
   filter(
     IdSession >= 5002, # Frühjahrssession 2016
     IdSession <= 5210, # Herbstsession 2025
-    LanguageOfText != "IT",
-    is.na(VoteBusinessNumber),
-    !is.na(SpeakerFunction)
-    # SpeakerFunction %in% c("Mit-F", "Mit-M")
+    LanguageOfText != "IT", # keine italienischen Texte
+    is.na(VoteBusinessNumber), # keine Abstimmungen
+    !is.na(SpeakerFunction), # keine Moderationen oder technische Hinweise
+    !str_detect(Text, "\\[VS]") # remove paragraphs with VS (Vorsitzender) tags
   )
 
 # session_statistics <- transcripts_filtered |>
@@ -67,17 +75,9 @@ transcripts_filtered <- transcripts |>
 
 saveRDS(transcripts_filtered, "Data/transcripts_filtered.rds")
 
-# Tokenization and cleaning -----------------------------------------------
+# tokenize transcripts ---------------------------------------------------
 
-businesses_cleaned <- readRDS("Data/businesses_cleaned.rds")
-subjects <- readRDS("Data/subjects.rds")
 transcripts_filtered <- readRDS("Data/transcripts_filtered.rds")
-
-businesses_climate <- businesses_cleaned |>
-  filter(ClimateBusiness == TRUE)
-
-subjects_climate <- subjects |>
-  filter(BusinessShortNumber %in% businesses_climate$BusinessShortNumber)
 
 transcripts_tokenized <- transcripts_filtered |>
   mutate(
@@ -85,8 +85,24 @@ transcripts_tokenized <- transcripts_filtered |>
   ) |>
   unnest(paragraph)
 
+saveRDS(transcripts_tokenized, "Data/transcripts_tokenized.rds")
+
+# clean transcripts -----------------------------------------------------------
+
+transcripts_tokenized <- readRDS("Data/transcripts_tokenized.rds")
+
+# climate related businesses
+businesses_cleaned <- readRDS("Data/businesses_cleaned.rds")
+subjects <- readRDS("Data/subjects.rds")
+
+businesses_climate <- businesses_cleaned |>
+  filter(ClimateBusiness == TRUE)
+
+subjects_climate <- subjects |>
+  filter(BusinessShortNumber %in% businesses_climate$BusinessShortNumber)
+
 # short_paragraphs <- transcripts_tokenized |>
-#   filter(nchar(paragraph) < 50) # short paragraphs can be removed
+#   filter(nchar(paragraph) < 50)
 
 # italics <- transcripts_tokenized |>
 #   filter(str_detect(paragraph, "<i>")) # remove the italics tags
@@ -103,10 +119,6 @@ transcripts_cleaned <- transcripts_tokenized |>
     paragraph_id = row_number()
   ) |>
   ungroup() |>
-  filter(
-    !str_detect(paragraph, "\\[VS]"), # remove parapraphs with VS (Vorsitzender) tags
-    !nchar(paragraph) < 50 # remove short paragraphs
-  ) |>
   mutate(
     paragraph = paragraph |>
       str_replace_all("\\[PAGE \\d+\\]", "") |> # remove pagination

@@ -70,19 +70,19 @@ saveRDS(subjects, "Data/subjects.rds")
 
 # check results in SubjectBusiness ---------------------------------------
 
-subjects <- readRDS("Data/subjects.rds")
+# subjects <- readRDS("Data/subjects.rds")
 
-businesses_cleaned |> distinct(BusinessShortNumber)
-subjects |> distinct(BusinessShortNumber)
-# some businesses have no entries in SubjectBusiness
-# this is because some businesses have no discussion in the councils
+# businesses_cleaned |> distinct(BusinessShortNumber)
+# subjects |> distinct(BusinessShortNumber)
+# # some businesses have no entries in SubjectBusiness
+# # this is because some businesses have no discussion in the councils
 
-# show be which businesses are missing
-missing_bsn <- setdiff(
-  businesses_cleaned$BusinessShortNumber,
-  subjects$BusinessShortNumber
-)
-paste(length(missing_bsn), "businesses have no entries in SubjectBusiness.")
+# # show be which businesses are missing
+# missing_bsn <- setdiff(
+#   businesses_cleaned$BusinessShortNumber,
+#   subjects$BusinessShortNumber
+# )
+# paste(length(missing_bsn), "businesses have no entries in SubjectBusiness.")
 
 # # check whether businesses really have no entries in SubjectBusiness
 # get_data(
