@@ -4,7 +4,7 @@ library(tidyverse)
 
 # import data ------------------------------------------------------------
 
-labeled_dataset_raw <- read.csv("Data/labeled_dataset.csv")
+labeled_dataset_raw <- read.csv("labeled_dataset.csv")
 
 handcoding_dataset <- read.csv("Data/handcoding_dataset.csv")
 
@@ -39,7 +39,16 @@ labeled_dataset_cleaned <-
     WordCount
   )
 
-write_csv(labeled_dataset_cleaned, "Data/labeled_dataset_cleaned.csv")
+saveRDS(labeled_dataset_cleaned, "Data/labeled_dataset_cleaned.rds")
+
+# save training dataset
+training_data <- labeled_dataset_cleaned |>
+  select(paragraph_id,
+    original_text,
+    final_climate,
+    language)
+
+write_csv(training_data, "BERT_Finetuning/training_data.csv")
 
 # transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
 # transcripts_classified <- left_join(transcripts_cleaned, training_dataset, by = join_by(paragraph))
