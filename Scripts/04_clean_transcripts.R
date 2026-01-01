@@ -131,7 +131,8 @@ transcripts_cleaned <- transcripts_tokenized |>
       FALSE
     ),
     ID = paste0(ID, "_", paragraph_id),
-    Textlength = nchar(paragraph),
+    WordCount = str_count(paragraph, "\\S+"),
+    TextLength = nchar(paragraph),
     MeetingId = as.character(MeetingVerbalixOid),
     CouncilId = as.character(CouncilId),
     CantonId = as.character(CantonId)
@@ -154,12 +155,12 @@ saveRDS(transcripts_cleaned, "Data/transcripts_cleaned.rds")
 transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
 # transcripts_cleaned |> pull(paragraph) |> sample(10)
 
-ggplot(transcripts_cleaned, aes(x = Textlength)) +
+ggplot(transcripts_cleaned, aes(x = WordCount)) +
   geom_histogram() +
-  xlim(0, 2000) +
+  xlim(0, 300) +
   theme_minimal() +
   labs(
-    x = "Paragraph Length (in characters)",
+    x = "Paragraph Length (in words)",
     y = "Number of Paragraphs",
     title = "Distribution of Paragraph Lengths in Complete Dataset"
   )
