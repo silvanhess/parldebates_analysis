@@ -5,3 +5,12 @@
 .env
 Data/
 Outputs/
+BERT_Finetuning/*.csv
+# **/files/
+# *.log
+# *.json
+# *.wandb
+**/cache_dir/
+**/final_model/
+**/runs/
+**/wandb/

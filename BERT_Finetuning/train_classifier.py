@@ -15,6 +15,7 @@ BERT Fine-Tuning Script for Multi-Class Classification (3 classes)
 import pandas as pd
 import numpy as np
 import time
+import os
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
@@ -75,15 +76,15 @@ def accuracy(labels, preds):
 # SECTION 4: DATA LOADING & PREPROCESSING
 # ============================================================================
 
-# Set your working directory (change this path to your data location)
-# os.chdir('/path/to/your/data')
+# get current directory
+os.getcwd()
 
 print("\n" + "="*60)
 print("Loading training data...")
 print("="*60)
 
 # Load data
-dat = pd.read_csv('labeled_dataset_cleaned.csv')
+dat = pd.read_csv('training_data.csv')
 
 # Ensure target variable is integer
 dat['final_climate'] = dat['final_climate'].astype(int)
@@ -321,6 +322,7 @@ model_args.early_stopping_patience = 2  # Stop if no improvement for 2 evals
 model_args.early_stopping_delta = 0.01  # Minimum improvement threshold
 model_args.early_stopping_metric = "f1_macro"
 model_args.early_stopping_metric_minimize = False
+model_args.weight = weights.tolist()
 
 
 # ============================================================================
@@ -348,7 +350,6 @@ def train():
         model_type,
         model_name,
         num_labels=3,
-        weight=weights if wandb.config.use_class_weights else None,
         use_cuda=False,  # CPU only
         args=model_args,
         sweep_config=wandb.config,
@@ -549,7 +550,6 @@ def train_single_run():
         model_type,
         model_name,
         num_labels=3,
-        weight=weights,
         use_cuda=False,
         args=model_args,
     )
