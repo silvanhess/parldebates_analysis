@@ -14,3 +14,4 @@ BERT_Finetuning/*.csv
 **/final_model/
 **/runs/
 **/wandb/
+**/outputs*/

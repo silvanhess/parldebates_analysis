@@ -18,8 +18,8 @@ labeled_dataset_cleaned <-
   mutate(
     sentiment = case_when(
       sentiment == "non_climate" ~ 0,
-      sentiment == "non_classifiable" ~ 1,
-      sentiment == "climate" ~ 2
+      sentiment == "non_classifiable" ~ 0,
+      sentiment == "climate" ~ 1
     ),
     WordCount = str_count(paragraph, "\\S+")
   ) |>
@@ -55,14 +55,12 @@ write_csv(training_data, "BERT_Finetuning/training_data.csv")
 
 # plot data ------------------------------------------------------------------
 
-labeled_dataset_cleaned <- read.csv("Data/labeled_dataset_cleaned.csv")
+labeled_dataset_cleaned <- readRDS("Data/labeled_dataset_cleaned.rds")
 
 ggplot(labeled_dataset_cleaned, aes(x = WordCount)) +
   geom_histogram() +
   xlim(0, 300) +
-  # insert a red vertical line at 256 words
   geom_vline(xintercept = 256, color = "red", linetype = "dashed") +
-  # label the line as "cutoff"
   annotate(
     "text",
     x = 260,
@@ -95,7 +93,6 @@ ggplot(df_grouped, aes(x = language, y = pct_paragraphs)) +
     title = "Distribution of Languages in Training Dataset"
   ) +
   theme_minimal() +
-  # label the columns with the number of paragraphs
   geom_text(
     aes(label = paste(number_of_paragraphs, "paragraphs")),
     vjust = -0.5
@@ -112,10 +109,9 @@ df_grouped <- labeled_dataset_cleaned |>
 ggplot(df_grouped, aes(x = final_climate, y = pct_paragraphs)) +
   geom_col() +
   scale_y_continuous(labels = scales::percent_format()) +
-  # convert class numbers to labels
   scale_x_continuous(
-    breaks = c(0, 1, 2),
-    labels = c("non_climate", "non_classifiable", "climate")
+    breaks = c(0, 1),
+    labels = c("non_climate", "climate")
   ) +
   labs(
     x = "class",
@@ -123,7 +119,6 @@ ggplot(df_grouped, aes(x = final_climate, y = pct_paragraphs)) +
     title = "Distribution of Climate Related Paragraphs in Training Dataset"
   ) +
   theme_minimal() +
-  # label the columns with the number of paragraphs
   geom_text(
     aes(label = paste(number_of_paragraphs, "paragraphs")),
     vjust = -0.5
