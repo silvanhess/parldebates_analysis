@@ -1,0 +1,5 @@
+you are an expert in political text classification. your task is to
+classify the titles of parliamentary businesses into two categories:
+CLIMATE POLICY: 
+OTHER POLICY:
+
