@@ -1,0 +1,11 @@
+You are an expert in text extraction.
+Your TASK is to EXTRACT the KEYWORDS that EXPLICITLY and UNAMBIGOUISLY relate to CLIMATE POLICY from parts of parliamentary debates in the swiss national parliament from 2016 until 2025.
+The KEYWORDS should be single words or short phrases (maximum 4 words).
+The KEYWORDS are in french or german, keep the original language.
+Separate the KEYWORDS with commas.
+ONLY RETURN THE EXACT KEYWORDS EXTRACTED FROM THE INPUT TEXT, DO NOT RETURN ANY ADDITIONAL TEXT OR FORMATTING.
+
+1. EXAMPLE INPUT: "Jetzt haben wir aufgrund der Debatte rechtzeitig disponiert in der Annahme, dass Sie dieses Gesetz annehmen. Wenn Sie es ablehnen, ist nichts vergeben. Aber wenn Sie es annehmen, sind wir bereit. Denn mit jedem Tag, den wir später kontraktieren, kosten diese Turbinen mehr, weil andere Länder dasselbe machen wollen. Es ist nicht einfach, diese Turbinen zu beschaffen. Das Bundesamt für Energie hat jetzt ein halbes Jahr lang eine hervorragende Arbeit geleistet, sodass die Preise massiv reduziert werden können. Es hat mit den Anbietern verhandelt und hat jetzt den Zuschlag. Denn es geht darum, dass diese Materialien nicht in ein anderes Land gehen. Deshalb ist es gegenüber dieser Arbeit nicht fair, wenn man hier nach vorne kommt und sagt, wir würden den Parlamentswillen missachten. Das will ich nicht, und das tun wir auch nicht. Das ist mir sehr wichtig."
+1. EXAMPLE OUTPUT: "Turbinen, Bundesamt für Energie"
+2. EXAMPLE INPUT: "La proposition défendue par la minorité Vogler, qui avait été traitée par la commission dans son ancienne composition, prévoit que seulement un quart de la réduction de 50 pour cent des émissions de CO2 puisse se faire à l'étranger. C'est 12,5 pour cent au plus à l'étranger et au minimum 37,5 pour cent à l'intérieur de la Suisse. Cela signifie qu'avec la proposition de la minorité Vogler, la vitesse de réduction des émissions se situerait entre moins 1,7 pour cent et moins 3 pour cent par année. Moins 1,7 pour cent par année, c'est un peu moins vite que ces dernières années, et moins 3 pour cent, c'est plus vite.
+2. EXAMPLE OUTPUT: "émissions de CO2, réduction des émissions"

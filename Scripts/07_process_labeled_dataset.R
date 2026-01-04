@@ -2,6 +2,14 @@
 
 library(tidyverse)
 
+# fix the ids ------------------------------------------------------------
+
+labeled_dataset_raw <- read.csv("labeled_dataset.csv")
+handcoding_dataset <- read.csv("Data/handcoding_dataset.csv")
+transcripts_cleaned <- read_rds("Data/transcripts_cleaned.rds")
+
+# 1. seperate transcript id and paragraph number
+
 # import data ------------------------------------------------------------
 
 labeled_dataset_raw <- read.csv("labeled_dataset.csv")
@@ -43,10 +51,7 @@ saveRDS(labeled_dataset_cleaned, "Data/labeled_dataset_cleaned.rds")
 
 # save training dataset
 training_data <- labeled_dataset_cleaned |>
-  select(paragraph_id,
-    original_text,
-    final_climate,
-    language)
+  select(paragraph_id, original_text, final_climate, language)
 
 write_csv(training_data, "BERT_Finetuning/training_data.csv")
 
