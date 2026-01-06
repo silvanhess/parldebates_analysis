@@ -5,8 +5,6 @@
 .env
 Data/
 Outputs/
-openai_key.txt
-
 
 BERT_Finetuning/*.csv
 # **/files/
