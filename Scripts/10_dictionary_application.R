@@ -10,25 +10,12 @@ library(stopwords)
 # import data ------------------------------------------------------------
 
 transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
-# french_dictionary_curated <- read.xlsx("french_dictionary_curated.xlsx")
-german_dictionary_curated <- read.xlsx("german_dictionary_curated.xlsx")
+french_dictionary_curated <- read.xlsx("french_dictionary_curated.xlsx") |> 
+  rename(keyword_original = keyword_french)
+german_dictionary_curated <- read.xlsx("german_dictionary_curated.xlsx") |> 
+  rename(keyword_original = keyword_german)
 
 # prepare data -----------------------------------------------------------
-
-german_dictionary_curated_tidy <- german_dictionary_curated |> 
-  select(keyword_german, category) |> 
-  unnest_tokens(
-    output = "word",
-    input = "keyword_german",
-    token = "words",
-    drop = FALSE
-  ) |> 
-  mutate(
-    word = str_to_lower(word),
-    word = str_replace_all(word, "[^[:alnum:]'-]", ""),
-    word = str_squish(word)
-  ) |> 
-  distinct()
 
 transcripts_words <- transcripts_cleaned |> 
   select(ID, paragraph) |> 
@@ -56,8 +43,34 @@ transcripts_words_cleaned <- transcripts_words |>
   ) |> 
   anti_join(stopwords_all, by = join_by(word == stopwords))
   
+# save as rds
+write_rds(transcripts_words_cleaned, "Data/transcripts_words_cleaned.rds")
+
+dictionary_all_cleaned <- german_dictionary_curated |> 
+  bind_rows(french_dictionary_curated) |>
+  mutate(
+    keyword_original = str_to_lower(keyword_original),
+    keyword_original = str_replace_all(keyword_original, "[^[:alnum:]'-]", ""),
+    keyword_original = str_squish(keyword_original)
+  )
+
+# save as rds
+# write_rds(dictionary_all_cleaned, "Data/dictionary_all_cleaned.rds")
 
 # apply dictionary --------------------------------------------------------
 
-transcripts_clasified <- transcripts_cleaned |> 
-  left_join
+# classify transcripts by counting matches with dictionary
+
+transcripts_classified <- transcripts_words_cleaned |> 
+  left_join(dictionary_all_cleaned, by = join_by(word == keyword_original)) |> 
+  group_by(ID, paragraph) |>
+  summarise(
+    keywords_found = paste(na.omit(unique(keyword_english)), collapse = ", "),
+    n_keywords_found = sum(!is.na(keyword_english)),
+    climate_paragraph = if_else(n_keywords_found > 0, TRUE, FALSE),
+    .groups = "drop"
+  ) |> 
+  left_join(transcripts_cleaned, by = join_by(ID))
+
+# save as rds
+write_rds(transcripts_classified, "Data/transcripts_classified.rds")

@@ -29,7 +29,7 @@ process_text <- function(text, index) {
     model = "gpt-5-mini",
     system_prompt = prompt
   )
-  
+
   # Skip if empty
   if (is.na(text) || text == "") {
     message("Skipping empty row ", index)
@@ -40,13 +40,13 @@ process_text <- function(text, index) {
   result <- tryCatch(
     {
       response <- chat$chat(text)
-      if (!is.null(response)) {
-        message("Successfully processed row ", index)
-        response
-      } else {
-        message("No response for row ", index)
-        NA_character_
-      }
+      # if (!is.null(response)) {
+      #   message("Successfully processed row ", index)
+      #   response
+      # } else {
+      #   message("No response for row ", index)
+      #   NA_character_
+      # }
     },
     error = function(e) {
       message("Error processing row ", index, ": ", e$message)

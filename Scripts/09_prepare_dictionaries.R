@@ -1,4 +1,3 @@
-
 # libraries --------------------------------------------------------------
 
 library(tidyverse)
@@ -10,28 +9,28 @@ source("Scripts/00_functions.R")
 
 keywords_extracted <- read_rds("Data/keywords_extracted.rds")
 
-# prepare french dictionary -----------------------------------------------
-
-french_keywords <- keywords_extracted |> 
-  filter(language == "FR") |>
-  pull(keywords) |> 
-  str_split(",") |> 
-  unlist() |>
-  str_squish() |>
-  sort() |>
-  unique() |> 
-  discard(~ .x == "")
-
 # prepare german dictionary -----------------------------------------------
 
-german_keywords <- keywords_extracted |> 
+german_keywords <- keywords_extracted |>
   filter(language == "DE") |>
-  pull(keywords) |> 
-  str_split(",") |> 
+  pull(keywords) |>
+  str_split(",") |>
   unlist() |>
   str_squish() |>
   sort() |>
-  unique() |> 
+  unique() |>
+  discard(~ .x == "")
+
+# prepare french dictionary -----------------------------------------------
+
+french_keywords <- keywords_extracted |>
+  filter(language == "FR") |>
+  pull(keywords) |>
+  str_split(",") |>
+  unlist() |>
+  str_squish() |>
+  sort() |>
+  unique() |>
   discard(~ .x == "")
 
 # translate to english ---------------------------------------------------
@@ -56,7 +55,7 @@ german_dictionary$keyword_english <- map_chr(
   .progress = TRUE
 )
 
-french_dictionary$keyword_french <- map_chr(
+french_dictionary$keyword_english <- map_chr(
   french_dictionary$keyword_french,
   deepl_translate,
   .progress = TRUE
@@ -67,3 +66,6 @@ french_dictionary$keyword_french <- map_chr(
 # export as excel
 write.xlsx(german_dictionary, "Data/german_dictionary.xlsx")
 write.xlsx(french_dictionary, "Data/french_dictionary.xlsx")
+
+# by hand, check the keywords and clean the dictionaries
+# after cleaning, save them as *_curated.xlsx
