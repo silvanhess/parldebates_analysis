@@ -1,4 +1,3 @@
-
 # libraries --------------------------------------------------------------
 
 # library(textdata)
@@ -10,15 +9,15 @@ library(stopwords)
 # import data ------------------------------------------------------------
 
 transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
-french_dictionary_curated <- read.xlsx("french_dictionary_curated.xlsx") |> 
+french_dictionary_curated <- read.xlsx("french_dictionary_curated.xlsx") |>
   rename(keyword_original = keyword_french)
-german_dictionary_curated <- read.xlsx("german_dictionary_curated.xlsx") |> 
+german_dictionary_curated <- read.xlsx("german_dictionary_curated.xlsx") |>
   rename(keyword_original = keyword_german)
 
 # prepare data -----------------------------------------------------------
 
-transcripts_words <- transcripts_cleaned |> 
-  select(ID, paragraph) |> 
+transcripts_words <- transcripts_cleaned |>
+  select(ID, paragraph) |>
   unnest_tokens(
     output = "word",
     input = "paragraph",
@@ -27,7 +26,11 @@ transcripts_words <- transcripts_cleaned |>
   )
 
 # get german stopwords from stopwords package
-german_stopwords <- stopwords::stopwords("de", source = "snowball")
+german_stopwords <- c(
+  stopwords::stopwords("de", source = "snowball"),
+  "dass"
+) |>
+  sort()
 
 # get french stopwords from stopwords package
 french_stopwords <- stopwords::stopwords("fr", source = "snowball")
@@ -35,18 +38,18 @@ french_stopwords <- stopwords::stopwords("fr", source = "snowball")
 # put together stopwords
 stopwords_all <- tibble(stopwords = c(german_stopwords, french_stopwords))
 
-transcripts_words_cleaned <- transcripts_words |> 
+transcripts_words_cleaned <- transcripts_words |>
   mutate(
     word = str_to_lower(word),
     word = str_replace_all(word, "[^[:alnum:]'-]", ""),
     word = str_squish(word)
-  ) |> 
+  ) |>
   anti_join(stopwords_all, by = join_by(word == stopwords))
-  
+
 # save as rds
 write_rds(transcripts_words_cleaned, "Data/transcripts_words_cleaned.rds")
 
-dictionary_all_cleaned <- german_dictionary_curated |> 
+dictionary_all_cleaned <- german_dictionary_curated |>
   bind_rows(french_dictionary_curated) |>
   mutate(
     keyword_original = str_to_lower(keyword_original),
@@ -61,16 +64,28 @@ dictionary_all_cleaned <- german_dictionary_curated |>
 
 # classify transcripts by counting matches with dictionary
 
-transcripts_classified <- transcripts_words_cleaned |> 
-  left_join(dictionary_all_cleaned, by = join_by(word == keyword_original)) |> 
+transcripts_classified <- transcripts_words_cleaned |>
+  left_join(dictionary_all_cleaned, by = join_by(word == keyword_original)) |>
   group_by(ID, paragraph) |>
   summarise(
     keywords_found = paste(na.omit(unique(keyword_english)), collapse = ", "),
     n_keywords_found = sum(!is.na(keyword_english)),
     climate_paragraph = if_else(n_keywords_found > 0, TRUE, FALSE),
     .groups = "drop"
-  ) |> 
+  ) |>
   left_join(transcripts_cleaned, by = join_by(ID))
 
 # save as rds
 write_rds(transcripts_classified, "Data/transcripts_classified.rds")
+
+# # inspect results ---------------------------------------------------------
+
+# transcripts_classified <- read_rds("Data/transcripts_classified.rds")
+
+# # check random paragraphs
+# random_paragraphs <- sample(unique(transcripts_classified$ID), 10)
+# transcripts_classified |>
+#   filter(ID %in% random_paragraphs) |>
+#   arrange(ID) |>
+#   select(ID, paragraph.x, climate_paragraph, n_keywords_found, keywords_found) |>
+#   print(n = 10)
