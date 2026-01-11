@@ -8,47 +8,14 @@ library(slam)
 
 # import data ------------------------------------------------------------
 
-transcripts_classified <- readRDS("Data/transcripts_classified.rds")
-businesses_cleaned <- readRDS("Data/businesses_cleaned.rds")
-subjects <- readRDS("Data/subjects.rds")
+df_climate_wide <- read_rds("Data/transcripts_classified.rds")
+businesses_cleaned <- read_rds("Data/businesses_cleaned.rds")
+subjects <- read_rds("Data/subjects.rds")
 transcripts_words_cleaned <- read_rds("Data/transcripts_words_cleaned.rds")
-
-# join business info to transcripts --------------------------------------
-
-# goal: make the business ID the document ID for topic modeling
-
-transcripts_subjects <- left_join(
-  transcripts_classified,
-  subjects,
-  by = join_by(IdSubject),
-  relationship = "many-to-many"
-)
-
-transcripts_subjects_businesses <- left_join(
-  transcripts_subjects,
-  businesses_cleaned,
-  by = join_by(BusinessShortNumber),
-  relationship = "many-to-one"
-)
-
-# unique_businesses <- transcripts_subjects_businesses |>
-#   distinct(BusinessShortNumber) |>
-#   pull(BusinessShortNumber)
-
-# businesses_debated <- businesses_cleaned |>
-#   filter(BusinessShortNumber %in% unique_businesses)
-
-# missing_businesses <- anti_join(
-#   transcripts_subjects_businesses,
-#   businesses_cleaned,
-#   by = join_by(BusinessShortNumber)
-# ) |>
-#   distinct(BusinessShortNumber, Title)
 
 # prepare data for topic modeling -----------------------------------------
 
-df <- transcripts_subjects_businesses |>
-  filter(climate_paragraph == TRUE) |>
+df <- df_climate_wide |>
   rename("ID" = "ID.x") |>
   select(ID, BusinessShortNumber, LanguageOfText) |>
   left_join(

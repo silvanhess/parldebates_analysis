@@ -8,11 +8,13 @@ library(stopwords)
 
 # import data ------------------------------------------------------------
 
-transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
+transcripts_cleaned <- read_rds("Data/transcripts_cleaned.rds")
 french_dictionary_curated <- read.xlsx("french_dictionary_curated.xlsx") |>
   rename(keyword_original = keyword_french)
 german_dictionary_curated <- read.xlsx("german_dictionary_curated.xlsx") |>
   rename(keyword_original = keyword_german)
+businesses_cleaned <- read_rds("Data/businesses_cleaned.rds")
+subjects <- read_rds("Data/subjects.rds")
 
 # prepare data -----------------------------------------------------------
 
@@ -26,6 +28,7 @@ transcripts_words <- transcripts_cleaned |>
   )
 
 # get german stopwords from stopwords package
+# add additional stopwords
 german_stopwords <- c(
   stopwords::stopwords("de", source = "snowball"),
   "dass"
@@ -62,7 +65,7 @@ dictionary_all_cleaned <- german_dictionary_curated |>
 
 # apply dictionary --------------------------------------------------------
 
-# classify transcripts by counting matches with dictionary
+# classify transcript paragraphs by counting matches with dictionary
 
 transcripts_classified <- transcripts_words_cleaned |>
   left_join(dictionary_all_cleaned, by = join_by(word == keyword_original)) |>
@@ -75,8 +78,52 @@ transcripts_classified <- transcripts_words_cleaned |>
   ) |>
   left_join(transcripts_cleaned, by = join_by(ID))
 
-# save as rds
-write_rds(transcripts_classified, "Data/transcripts_classified.rds")
+# classify climate relevant businesses -----------------------------------
+
+transcripts_subjects <- left_join(
+  transcripts_classified,
+  subjects,
+  by = join_by(IdSubject),
+  relationship = "many-to-many"
+)
+
+transcripts_subjects_businesses <- left_join(
+  transcripts_subjects,
+  businesses_cleaned,
+  by = join_by(BusinessShortNumber),
+  relationship = "many-to-one"
+)
+
+climate_businesses <- transcripts_subjects_businesses |>
+  filter(climate_paragraph == TRUE) |>
+  distinct(BusinessShortNumber) |>
+  pull(BusinessShortNumber)
+
+other_businesses <- transcripts_subjects_businesses |>
+  filter(climate_paragraph == FALSE) |>
+  distinct(BusinessShortNumber) |>
+  pull(BusinessShortNumber)
+
+# proportion of climate relevant businesses
+proportion_climate_businesses <- length(climate_businesses) /
+  length(other_businesses)
+
+df_climate_wide <- transcripts_subjects_businesses |>
+  mutate(
+    # create a variable climate_business indicating whether the business contains climate relevant paragraphs
+    climate_business = case_when(
+      BusinessShortNumber %in% climate_businesses ~ TRUE,
+      .default = FALSE
+    )
+  )
+
+write_rds(df_climate_wide, "Data/df_climate_wide.rds")
+
+# inspect business titles
+df_climate_wide |>
+  distinct(Title.x) |>
+  pull(Title.x) |>
+  sample(100)
 
 # # inspect results ---------------------------------------------------------
 

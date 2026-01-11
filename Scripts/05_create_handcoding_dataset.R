@@ -41,7 +41,7 @@ saveRDS(transcripts_sampled, "Data/transcripts_sampled.rds")
 
 # plot data ------------------------------------------------------------------
 
-transcripts_sampled <- readRDS("Data/transcripts_sampled.rds")
+# transcripts_sampled <- readRDS("Data/transcripts_sampled.rds")
 # transcripts_cleaned |> pull(paragraph) |> sample(10)
 
 ggplot(transcripts_sampled, aes(x = WordCount)) +
