@@ -1,131 +1,96 @@
 # libraries --------------------------------------------------------------
 
 library(tidyverse)
-
-# fix the ids ------------------------------------------------------------
-
-labeled_dataset_raw <- read.csv("labeled_dataset.csv")
-handcoding_dataset <- read.csv("Data/handcoding_dataset.csv")
-transcripts_cleaned <- read_rds("Data/transcripts_cleaned.rds")
-
-# 1. seperate transcript id and paragraph number
+source("Scripts/00_functions.R")
 
 # import data ------------------------------------------------------------
 
-labeled_dataset_raw <- read.csv("labeled_dataset.csv")
+labeled_dataset <- read_csv("labeled_dataset.csv")
+handcoding_dataset <- read_rds("Data/handcoding_dataset.rds")
+paragraphs_cleaned <- read_rds("Data/paragraphs_cleaned.rds")
 
-handcoding_dataset <- read.csv("Data/handcoding_dataset.csv")
+# clean labeled dataset --------------------------------------------------
+
+# since I didn't label all the paragraphs in the handcoding dataset,
+# I need to do some preprocessing to get the final labeled dataset
 
 labeled_dataset_cleaned <-
-  # join handcoding dataset because in the first version i forgot to include the original paragraph
+  # join paragraphs_cleaned because in the first version i forgot to include the original paragraph
   inner_join(
-    labeled_dataset_raw,
-    handcoding_dataset,
-    by = join_by(ID)
+    labeled_dataset,
+    paragraphs_cleaned,
+    by = join_by(paragraph_id)
   ) |>
   mutate(
     sentiment = case_when(
-      sentiment == "non_climate" ~ 0,
-      sentiment == "non_classifiable" ~ 0,
-      sentiment == "climate" ~ 1
+      sentiment == "non_climate" ~ FALSE,
+      sentiment == "non_classifiable" ~ FALSE,
+      sentiment == "climate" ~ TRUE
     ),
     WordCount = str_count(paragraph, "\\S+")
   ) |>
   rename(
-    paragraph_id = ID,
-    original_text = paragraph,
-    paragraph_translated = paragraph_translated.x,
     final_climate = sentiment,
-    language = LanguageOfText.x
+    LanguageOfText = LanguageOfText.x
   ) |>
   select(
-    paragraph_id,
-    original_text,
-    paragraph_translated,
-    final_climate,
-    language,
-    WordCount
+    !c(
+      annotation_id,
+      annotator,
+      created_at,
+      id,
+      lead_time,
+      updated_at
+    )
   )
 
-saveRDS(labeled_dataset_cleaned, "Data/labeled_dataset_cleaned.rds")
+write_rds(labeled_dataset_cleaned, "Data/labeled_dataset_cleaned.rds")
 
-# save training dataset
-training_data <- labeled_dataset_cleaned |>
-  select(paragraph_id, original_text, final_climate, language)
+# # save training dataset for BERT Fine-Tuning
+# training_data <- labeled_dataset_cleaned |>
+# rename(
+#     original_text = paragraph,
+#     language = LanguageOfText
+#   ) |>
+#   select(paragraph_id, original_text, final_climate, language)
 
-write_csv(training_data, "BERT_Finetuning/training_data.csv")
+# write_csv(training_data, "BERT_Finetuning/training_data.csv")
 
 # transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
 # transcripts_classified <- left_join(transcripts_cleaned, training_dataset, by = join_by(paragraph))
 
 # plot data ------------------------------------------------------------------
 
-labeled_dataset_cleaned <- readRDS("Data/labeled_dataset_cleaned.rds")
+# plot distribution of text lengths
+plot_word_count_distribution(
+  data = labeled_dataset_cleaned,
+  title = "Distribution of Paragraph Lengths in Labeled Paragraphs",
+  output_path = "Outputs/labeled_paragraphs_text_length_distribution.png"
+)
 
-ggplot(labeled_dataset_cleaned, aes(x = WordCount)) +
-  geom_histogram() +
-  xlim(0, 300) +
-  geom_vline(xintercept = 256, color = "red", linetype = "dashed") +
-  annotate(
-    "text",
-    x = 260,
-    y = 10,
-    label = "Max Tokens",
-    color = "red",
-    hjust = 1.5
-  ) +
-  theme_minimal() +
-  labs(
-    x = "Paragraph Length (in words)",
-    y = "Number of Paragraphs",
-    title = "Distribution of Paragraph Lengths in Training Dataset"
-  )
-ggsave("Outputs/training_dataset_text_length.png")
+# plot distribution of languages
+plot_categorical_distribution(
+  data = labeled_dataset_cleaned,
+  group_col = "LanguageOfText",
+  title = "Distribution of Languages in Labeled Paragraphs",
+  x_label = "Language of Paragraphs",
+  output_path = "Outputs/labeled_paragraphs_language_distribution.png"
+)
 
-df_grouped <- labeled_dataset_cleaned |>
-  group_by(language) |>
-  summarise(
-    number_of_paragraphs = n(),
-    pct_paragraphs = number_of_paragraphs / nrow(labeled_dataset_cleaned)
-  )
+# plot business tag distribution
+plot_categorical_distribution(
+  data = labeled_dataset_cleaned,
+  group_col = "business_tag_climate",
+  x_label = "Energy, Transport or Environment Related Business",
+  title = "Distribution of Business Tags in Labeled Paragraphs",
+  output_path = "Outputs/labeled_paragraphs_business_tags_distribution.png"
+)
 
-ggplot(df_grouped, aes(x = language, y = pct_paragraphs)) +
-  geom_col() +
-  scale_y_continuous(labels = scales::percent_format()) +
-  labs(
-    x = "Language of Paragraphs",
-    y = "Percentage of Paragraphs",
-    title = "Distribution of Languages in Training Dataset"
-  ) +
-  theme_minimal() +
-  geom_text(
-    aes(label = paste(number_of_paragraphs, "paragraphs")),
-    vjust = -0.5
-  )
-ggsave("Outputs/training_dataset_language_distribution.png")
-
-df_grouped <- labeled_dataset_cleaned |>
-  group_by(final_climate) |>
-  summarise(
-    number_of_paragraphs = n(),
-    pct_paragraphs = number_of_paragraphs / nrow(labeled_dataset_cleaned)
-  )
-
-ggplot(df_grouped, aes(x = final_climate, y = pct_paragraphs)) +
-  geom_col() +
-  scale_y_continuous(labels = scales::percent_format()) +
-  scale_x_continuous(
-    breaks = c(0, 1),
-    labels = c("non_climate", "climate")
-  ) +
-  labs(
-    x = "class",
-    y = "Percentage of Paragraphs",
-    title = "Distribution of Climate Related Paragraphs in Training Dataset"
-  ) +
-  theme_minimal() +
-  geom_text(
-    aes(label = paste(number_of_paragraphs, "paragraphs")),
-    vjust = -0.5
-  )
-ggsave("Outputs/training_dataset_class_distribution.png")
+# plot distribution of final climate labels
+plot_categorical_distribution(
+  data = labeled_dataset_cleaned,
+  group_col = "final_climate",
+  x_label = "Class",
+  title = "Distribution of Climate Related Paragraphs in Labeled Paragraphs",
+  output_path = "Outputs/labeled_paragraphs_class_distribution.png"
+)

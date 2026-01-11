@@ -6,8 +6,8 @@ library(furrr)
 library(future)
 
 # Step 1: Load the dataset
-df <- readRDS("Data/labeled_dataset_cleaned.rds") |>
-  filter(final_climate == 1)
+df <- read_rds("Data/labeled_dataset_cleaned.rds") |>
+  filter(final_climate == TRUE)
 
 # Initialize keywords column
 df$keywords <- NA_character_

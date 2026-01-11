@@ -2,9 +2,11 @@
 
 library(tidyverse)
 
-# create dataset for labeling --------------------------------------------
+# import data ------------------------------------------------------------
 
-transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
+paragraphs_cleaned <- read_rds("Data/paragraphs_cleaned.rds")
+
+# create dataset for labeling --------------------------------------------
 
 # create a balanced dataset for labeling
 # for the initial training of the classifier we want to have
@@ -22,9 +24,9 @@ transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
 #   mutate(percentage = n / sum(n) * 100)
 
 set.seed(1234)
-transcripts_sampled <- transcripts_cleaned |>
+handcoding_dataset <- paragraphs_cleaned |>
   mutate(
-    cb_weight = if_else(ClimateBusiness == TRUE, 10, 1),
+    cb_weight = if_else(business_tag_climate == TRUE, 10, 1),
     lang_weight = if_else(LanguageOfText == "FR", 3, 1),
     weight = cb_weight * lang_weight
   ) |>
@@ -37,66 +39,33 @@ transcripts_sampled <- transcripts_cleaned |>
 #   count(ClimateBusiness, LanguageOfText) |>
 #   mutate(percentage = n / sum(n) * 100)
 
-saveRDS(transcripts_sampled, "Data/transcripts_sampled.rds")
+write_rds(handcoding_dataset, "Data/handcoding_dataset.rds")
 
 # plot data ------------------------------------------------------------------
 
 # transcripts_sampled <- readRDS("Data/transcripts_sampled.rds")
 # transcripts_cleaned |> pull(paragraph) |> sample(10)
 
-ggplot(transcripts_sampled, aes(x = WordCount)) +
-  geom_histogram() +
-  xlim(0, 300) +
-  theme_minimal() +
-  labs(
-    x = "Paragraph Length (in words)",
-    y = "Number of Paragraphs",
-    title = "Distribution of Paragraph Lengths in Handcoding Dataset"
-  )
-ggsave("Outputs/transcripts_sampled_text_length.png")
+# plot distribution of text lengths
+plot_word_count_distribution(
+  data = handcoding_dataset,
+  title = "Distribution of Paragraph Lengths in Handcoding Dataset",
+  output_path = "Outputs/handcoding_dataset_text_length_distribution.png"
+)
 
-df <- transcripts_sampled |>
-  group_by(LanguageOfText) |>
-  summarise(
-    number_of_paragraphs = n(),
-    pct_paragraphs = number_of_paragraphs / nrow(transcripts_sampled)
-  )
+# plot distribution of languages
+plot_categorical_distribution(
+  data = handcoding_dataset,
+  group_col = "LanguageOfText",
+  title = "Distribution of Languages in Handcoding Dataset",
+  x_label = "Language of Paragraphs",
+  output_path = "Outputs/handcoding_dataset_language_distribution.png")
 
-ggplot(df, aes(x = LanguageOfText, y = pct_paragraphs)) +
-  geom_col() +
-  scale_y_continuous(labels = scales::percent_format()) +
-  labs(
-    x = "Language of Paragraphs",
-    y = "Percentage of Paragraphs",
-    title = "Distribution of Languages in Handcoding Dataset"
-  ) +
-  theme_minimal() +
-  # label the columns with the number of paragraphs
-  geom_text(
-    aes(label = paste(number_of_paragraphs, "paragraphs")),
-    vjust = -0.5
-  )
-ggsave("Outputs/transcripts_sampled_language_distribution.png")
-
-df <- transcripts_sampled |>
-  group_by(ClimateBusiness) |>
-  summarise(
-    number_of_paragraphs = n(),
-    pct_paragraphs = number_of_paragraphs / nrow(transcripts_sampled)
-  )
-
-ggplot(df, aes(x = ClimateBusiness, y = pct_paragraphs)) +
-  geom_col() +
-  scale_y_continuous(labels = scales::percent_format()) +
-  labs(
-    x = "Energy, Transport or Environment Related Paragraphs",
-    y = "Percentage of Paragraphs",
-    title = "Distribution of Climate Related Paragraphs in Handcoding Dataset"
-  ) +
-  theme_minimal() +
-  # label the columns with the number of paragraphs
-  geom_text(
-    aes(label = paste(number_of_paragraphs, "paragraphs")),
-    vjust = -0.5
-  )
-ggsave("Outputs/transcripts_sampled_topic_distribution.png")
+# plot business tag distribution
+plot_categorical_distribution(
+  data = handcoding_dataset,
+  group_col = "business_tag_climate",
+  x_label = "Energy, Transport or Environment Related Business",
+  title = "Distribution of Business Tags in Handcoding Dataset",
+  output_path = "Outputs/handcoding_dataset_business_tags_distribution.png"
+)

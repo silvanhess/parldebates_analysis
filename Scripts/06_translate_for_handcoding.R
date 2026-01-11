@@ -6,7 +6,7 @@ source("Scripts/00_functions.R")
 
 # Translage  for handcoding ----------------------------------------------
 
-transcripts_sampled <- readRDS("Data/transcripts_sampled.rds")
+handcoding_dataset <- read_rds("Data/handcoding_dataset.rds")
 
 # # count characters in french
 # transcripts_sampled |>
@@ -16,13 +16,13 @@ transcripts_sampled <- readRDS("Data/transcripts_sampled.rds")
 # Load Deepl Credentials
 load_dot_env()
 
-transcripts_sampled$paragraph_translated <- map_chr(
-  transcripts_sampled$paragraph,
+handcoding_dataset$paragraph_translated <- map_chr(
+  handcoding_dataset$paragraph,
   deepl_translate,
   .progress = TRUE
 )
 
-handcoding_dataset <- transcripts_sampled |>
+handcoding_dataset_translated <- handcoding_dataset |>
   select(ID, ClimateBusiness, LanguageOfText, paragraph, paragraph_translated)
 
 # handcoding_dataset <- readRDS("Data/handcoding_dataset.rds")
@@ -32,4 +32,4 @@ handcoding_dataset <- transcripts_sampled |>
 #     rename(ClimateBusiness = ClimateBusiness.x, LanguageOfText = LanguageOfText.x)
 
 # export to csv for labeling in label-studio
-write_csv(handcoding_dataset, "Data/handcoding_dataset.csv")
+write_csv(handcoding_dataset_translated, "Data/handcoding_dataset_translated.csv")

@@ -5,6 +5,7 @@
 .env
 Data/
 Outputs/
+Scripts/arc/
 
 BERT_Finetuning/*.csv
 # **/files/

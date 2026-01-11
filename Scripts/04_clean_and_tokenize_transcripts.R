@@ -2,10 +2,15 @@
 
 library(tidyverse)
 library(tidytext)
+source("Scripts/00_functions.R")
+
+# import data ------------------------------------------------------------
+
+transcripts <- read_rds("Data/transcripts.rds")
+businesses_cleaned <- read_rds("Data/businesses_cleaned.rds")
+subjects <- read_rds("Data/subjects.rds")
 
 # filter transcripts -----------------------------------------------------
-
-transcripts <- readRDS("Data/transcripts.rds")
 
 # sessions <- get_data(
 #   "Session",
@@ -37,14 +42,14 @@ transcripts <- readRDS("Data/transcripts.rds")
 # transcripts |> filter(!is.na(VoteBusinessNumber)) |> pull(Text) |> sample(10) # kann raus
 
 # # check VS tags
-# vorsitzender <- transcripts |> 
+# vorsitzender <- transcripts |>
 #   filter(
 #     str_detect(Text, "\\[VS]")
 #   )
 # # diese Transkript sind für die Analyse des Inhalts nicht von Interesse
 # # diese werden daher aus dem Datensatz entfernt
 
-# italienisch <- transcripts |> 
+# italienisch <- transcripts |>
 #   filter(LanguageOfText == "IT")
 # keine italienischen Texte, da nur ca. 1% der Texte
 
@@ -73,33 +78,33 @@ transcripts_filtered <- transcripts |>
 #     number_of_businesses = n_distinct(IdSubject)
 #   )
 
-saveRDS(transcripts_filtered, "Data/transcripts_filtered.rds")
+# saveRDS(transcripts_filtered, "Data/transcripts_filtered.rds")
 
 # tokenize transcripts ---------------------------------------------------
 
-transcripts_filtered <- readRDS("Data/transcripts_filtered.rds")
+# transcripts_filtered <- read_rds("Data/transcripts_filtered.rds")
 
-transcripts_tokenized <- transcripts_filtered |>
+paragraphs_raw <- transcripts_filtered |>
   mutate(
     paragraph = str_extract_all(Text, "(?<=<p>)(.*?)(?=</p>)")
   ) |>
   unnest(paragraph)
 
-saveRDS(transcripts_tokenized, "Data/transcripts_tokenized.rds")
+# saveRDS(transcripts_tokenized, "Data/transcripts_tokenized.rds")
 
 # clean transcripts -----------------------------------------------------------
 
-transcripts_tokenized <- readRDS("Data/transcripts_tokenized.rds")
-
-# climate related businesses
-businesses_cleaned <- readRDS("Data/businesses_cleaned.rds")
-subjects <- readRDS("Data/subjects.rds")
+# transcripts_tokenized <- read_rds("Data/transcripts_tokenized.rds")
 
 businesses_climate <- businesses_cleaned |>
-  filter(ClimateBusiness == TRUE)
+  filter(business_tag_climate == TRUE) |>
+  distinct(BusinessShortNumber) |>
+  pull(BusinessShortNumber)
 
 subjects_climate <- subjects |>
-  filter(BusinessShortNumber %in% businesses_climate$BusinessShortNumber)
+  filter(BusinessShortNumber %in% businesses_climate) |>
+  distinct(IdSubject) |>
+  pull(IdSubject)
 
 # short_paragraphs <- transcripts_tokenized |>
 #   filter(nchar(paragraph) < 50)
@@ -113,24 +118,24 @@ subjects_climate <- subjects |>
 # GZ_tags <- transcripts_tokenized |>
 #   filter(str_detect(paragraph, "\\[GZ]")) # handelt sich um eine Zäsur (langer Unterbruch) -> tags entfernen
 
-transcripts_cleaned <- transcripts_tokenized |>
+paragraphs_cleaned <- paragraphs_raw |>
   group_by(ID) |>
   mutate(
-    paragraph_id = row_number()
+    paragraph_id = paste0(ID, "-", row_number())
   ) |>
   ungroup() |>
+  rename(transcript_id = ID) |>
   mutate(
     paragraph = paragraph |>
       str_replace_all("\\[PAGE \\d+\\]", "") |> # remove pagination
       str_replace_all("<[^>]+>", "") |> # remove HTML tags for italics and bold etc.
       str_replace_all("\\[GZ]", "") |> # remove [GZ] tags (Grosse Zäsur)
       str_squish(),
-    ClimateBusiness = if_else(
-      IdSubject %in% subjects_climate$IdSubject,
+    business_tag_climate = if_else(
+      IdSubject %in% subjects_climate,
       TRUE,
       FALSE
     ),
-    ID = paste0(ID, "_", paragraph_id),
     WordCount = str_count(paragraph, "\\S+"),
     TextLength = nchar(paragraph),
     MeetingId = as.character(MeetingVerbalixOid),
@@ -148,66 +153,34 @@ transcripts_cleaned <- transcripts_tokenized |>
     )
   )
 
-saveRDS(transcripts_cleaned, "Data/transcripts_cleaned.rds")
+write_rds(paragraphs_cleaned, "Data/paragraphs_cleaned.rds")
 
 # plot data ------------------------------------------------------------------
 
-transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
+# transcripts_cleaned <- read_rds("Data/transcripts_cleaned.rds")
 # transcripts_cleaned |> pull(paragraph) |> sample(10)
 
-ggplot(transcripts_cleaned, aes(x = WordCount)) +
-  geom_histogram() +
-  xlim(0, 300) +
-  theme_minimal() +
-  labs(
-    x = "Paragraph Length (in words)",
-    y = "Number of Paragraphs",
-    title = "Distribution of Paragraph Lengths in Complete Dataset"
-  )
-ggsave("Outputs/transcripts_cleaned_text_length.png")
+# plot paragraph length distribution
+plot_word_count_distribution(
+  data = paragraphs_cleaned,
+  title = "Distribution of Paragraph Lengths in Complete Dataset",
+  output_path = "Outputs/paragraphs_cleaned_text_length_distribution.png"
+)
 
-df <- transcripts_cleaned |>
-  group_by(LanguageOfText) |>
-  summarise(
-    number_of_paragraphs = n(),
-    pct_paragraphs = number_of_paragraphs / nrow(transcripts_cleaned)
-  )
+# plot language distribution
+plot_categorical_distribution(
+  data = paragraphs_cleaned,
+  group_col = "LanguageOfText",
+  x_label = "Language of Paragraphs",
+  title = "Distribution of Languages in Complete Dataset",
+  output_path = "Outputs/paragraphs_cleaned_language_distribution.png"
+)
 
-ggplot(df, aes(x = LanguageOfText, y = pct_paragraphs)) +
-  geom_col() +
-  scale_y_continuous(labels = scales::percent_format()) +
-  labs(
-    x = "Language of Paragraphs",
-    y = "Percentage of Paragraphs",
-    title = "Distribution of Languages in Complete Dataset"
-  ) +
-  theme_minimal() +
-  # label the columns with the number of paragraphs
-  geom_text(
-    aes(label = paste(number_of_paragraphs, "paragraphs")),
-    vjust = -0.5
-  )
-ggsave("Outputs/transcripts_cleaned_language_distribution.png")
-
-df <- transcripts_cleaned |>
-  group_by(ClimateBusiness) |>
-  summarise(
-    number_of_paragraphs = n(),
-    pct_paragraphs = number_of_paragraphs / nrow(transcripts_cleaned)
-  )
-
-ggplot(df, aes(x = ClimateBusiness, y = pct_paragraphs)) +
-  geom_col() +
-  scale_y_continuous(labels = scales::percent_format()) +
-  labs(
-    x = "Energy, Transport or Environment Related Paragraphs",
-    y = "Percentage of Paragraphs",
-    title = "Distribution of Climate Related Paragraphs in Complete Dataset"
-  ) +
-  theme_minimal() +
-  # label the columns with the number of paragraphs
-  geom_text(
-    aes(label = paste(number_of_paragraphs, "paragraphs")),
-    vjust = -0.5
-  )
-ggsave("Outputs/transcripts_cleaned_topic_distribution.png")
+# plot business tag distribution
+plot_categorical_distribution(
+  data = paragraphs_cleaned,
+  group_col = "business_tag_climate",
+  x_label = "Energy, Transport or Environment Related Business",
+  title = "Distribution of Business Tags in Complete Dataset",
+  output_path = "Outputs/paragraphs_cleaned_business_tags_distribution.png"
+)

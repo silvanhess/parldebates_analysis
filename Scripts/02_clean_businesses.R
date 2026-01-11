@@ -31,9 +31,9 @@ library(tidyverse)
 #   arrange(desc(n)) |>
 #   print(n = Inf)
 
-# Clean businesses -----------------------------------------
+# Clean businesses ------------------------------------------------------
 
-businesses <- readRDS("Data/businesses.rds")
+businesses <- read_rds("Data/businesses.rds")
 
 businesses_cleaned <- businesses |>
   filter(
@@ -45,14 +45,12 @@ businesses_cleaned <- businesses |>
     BusinessDetails_long = paste(BusinessDetails_short, ReasonText),
     BusinessDetails_short_length = str_length(BusinessDetails_short),
     BusinessDetails_long_length = str_length(BusinessDetails_long),
-    ClimateBusiness = str_detect(Tags, "52|48|66"), # Mark climate related businesses based on tags
+    business_tag_climate = str_detect(Tags, "52|48|66"), # Mark climate related businesses based on tags
   )
 
-saveRDS(businesses_cleaned, "Data/businesses_cleaned.rds")
+write_rds(businesses_cleaned, "Data/businesses_cleaned.rds")
 
-# analyze cleaned businesses ---------------------------------------------
-
-businesses_cleaned <- readRDS("Data/businesses_cleaned.rds")
+# businesses_cleaned <- readRDS("Data/businesses_cleaned.rds")
 
 # # what tags are most common in Climate Businesses?
 # businesses_cleaned |>
@@ -62,9 +60,9 @@ businesses_cleaned <- readRDS("Data/businesses_cleaned.rds")
 #   arrange(desc(n)) |>
 #   print(n = Inf)
 
-# analyze business details
-businesses_cleaned |> 
-  filter(ClimateBusiness == TRUE) |>
-  slice_sample(n = 10) |>
-  pull(BusinessDetails_long)
+# # analyze business details
+# businesses_cleaned |> 
+#   filter(ClimateBusiness == TRUE) |>
+#   slice_sample(n = 10) |>
+#   pull(BusinessDetails_long)
 
