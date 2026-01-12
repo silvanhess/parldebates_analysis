@@ -150,12 +150,34 @@ write_rds(paragraphs_classified_wide, "Data/paragraphs_classified_wide.rds")
 # prepare for topic modeling ---------------------------------------------
 
 paragraphs_classified_wide <- read_rds("Data/paragraphs_classified_wide.rds")
+paragraphs_words_cleaned <- read_rds("Data/paragraphs_words_cleaned.rds")
+
+# transcripts_climate <- paragraphs_classified_wide |>
+#   filter(climate_transcript == TRUE) |>
+#   distinct(transcript_id, Text) |> 
+#   rename(transcript_text = Text) |> 
+#   mutate(text_length = str_count(transcript_text, "\\S+"))
 
 transcripts_climate <- paragraphs_classified_wide |>
   filter(climate_transcript == TRUE) |>
-  distinct(transcript_id, Text) |> 
-  rename(transcript_text = Text) |> 
-  mutate(text_length = str_count(transcript_text, "\\S+"))
+  distinct(transcript_id, paragraph_id) |> 
+  left_join(
+    paragraphs_words_cleaned,
+    by = join_by(paragraph_id),
+    relationship = "one-to-many"
+  ) |> 
+  select(-paragraph) |>
+  group_by(transcript_id) |> 
+  summarise(
+    transcript_text = paste(word, collapse = " "),
+    transcript_word_length = str_count(transcript_text, "\\S+"),
+    .groups = "drop"
+  )
+
+# # print random transcript text
+# transcripts_climate |> 
+#   slice_sample(n = 10) |> 
+#   pull(transcript_text)
 
 write_csv(
   transcripts_climate,
