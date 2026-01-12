@@ -6,6 +6,7 @@
 Data/
 Outputs/
 Scripts/arc/
+BERT_Finetuning/arc/
 
 BERT_Finetuning/*.csv
 # **/files/
