@@ -111,6 +111,11 @@ climate_businesses <- paragraphs_subjects_businesses |>
   distinct(BusinessShortNumber) |>
   pull(BusinessShortNumber)
 
+climate_transcripts <- paragraphs_subjects_businesses |>
+  filter(climate_paragraph == TRUE) |>
+  distinct(transcript_id) |>
+  pull(transcript_id)
+
 # other_businesses <- transcripts_subjects_businesses |>
 #   filter(climate_paragraph == FALSE) |>
 #   distinct(BusinessShortNumber) |>
@@ -126,22 +131,55 @@ paragraphs_classified_wide <- paragraphs_subjects_businesses |>
     climate_business = case_when(
       BusinessShortNumber %in% climate_businesses ~ TRUE,
       .default = FALSE
+    ),
+    climate_transcript = case_when(
+      transcript_id %in% climate_transcripts ~ TRUE,
+      .default = FALSE
     )
   ) |>
   rename(paragraph = paragraph.x)
 
 write_rds(paragraphs_classified_wide, "Data/paragraphs_classified_wide.rds")
 
-paragraphs_climate_wide <- paragraphs_classified_wide |>
-  filter(climate_business == TRUE)
-
-write_rds(paragraphs_climate_wide, "Data/paragraphs_climate_wide.rds")
-
 # # inspect business titles
 # transcript_climate_wide |>
 #   distinct(Title.x) |>
 #   pull(Title.x) |>
 #   sample(100)
+
+# prepare for topic modeling ---------------------------------------------
+
+paragraphs_classified_wide <- read_rds("Data/paragraphs_classified_wide.rds")
+
+transcripts_climate <- paragraphs_classified_wide |>
+  filter(climate_transcript == TRUE) |>
+  distinct(transcript_id, Text) |> 
+  rename(transcript_text = Text) |> 
+  mutate(text_length = str_count(transcript_text, "\\S+"))
+
+write_csv(
+  transcripts_climate,
+  "Data/transcripts_climate_for_topic_modeling.csv"
+)
+
+# businesses_climate <- paragraphs_classified_wide |> 
+#   filter(climate_business == TRUE) |>
+#   distinct(BusinessShortNumber, Text, BusinessDetails_long) |> 
+#   rename(business_id = BusinessShortNumber, business_text = Text) |> 
+#   # glue business text
+#   group_by(business_id, BusinessDetails_long) |>
+#   summarise(
+#     business_text = paste(business_text, collapse = " "),
+#     # calculate text length in words
+#     text_length = str_count(business_text, "\\S+"),
+#     .groups = "drop"
+#   )
+
+# write_csv(
+#   businesses_climate,
+#   "Data/businesses_climate_for_topic_modeling.csv"
+# )
+
 
 # plot results -----------------------------------------------------------
 
@@ -186,3 +224,18 @@ plot_categorical_distribution(
   title = "Distribution of Climate Relevant Businesses",
   output_path = "Outputs/businesses_climate_class_distribution.png"
 )
+
+# Aggragate to transcript level
+
+transcripts_climate <- paragraphs_classified_wide |>
+  distinct(transcript_id, climate_transcript)
+
+# plot climate transcript distribution
+plot_categorical_distribution(
+  transcripts_climate,
+  group_col = "climate_transcript",
+  x_label = "Climate Relevant Business",
+  label_suffix = "transcripts",
+  title = "Distribution of Climate Relevant Transcripts",
+  output_path = "Outputs/transcripts_climate_class_distribution.png"
+) # this includes paragraphs not classified as climate relevant but belonging to a climate relevant transcript
