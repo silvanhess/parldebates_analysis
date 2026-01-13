@@ -26,8 +26,8 @@ umap_model = UMAP(
 
 # Configure HDBSCAN with more granular clustering
 hdbscan_model = hdbscan.HDBSCAN(
-    min_cluster_size=50,  # Reduced to allow more topics (~1.7% of 6000)
-    min_samples=5,  # Lower value allows more clusters to form
+    min_cluster_size=30,  # Reduced to allow more topics
+    min_samples=3,  # Lower value allows more clusters to form
     metric='euclidean',
     cluster_selection_method='eom',
     prediction_data=True
@@ -71,12 +71,12 @@ df.to_csv('Data/documents_with_topics.csv', index=False)
 topic_info.to_csv('Data/topic_info.csv', index=False)
 
 # Optional: Visualize topics (uncomment if needed)
-# fig = topic_model.visualize_topics()
-# fig.write_html("topic_visualization.html")
+fig = topic_model.visualize_topics()
+fig.write_html("Outputs/topic_visualization.html")
 
 # Optional: Get representative documents for a specific topic
 # topic_num = 0  # Change to the topic you want to explore
 # print(f"\nRepresentative documents for Topic {topic_num}:")
 # print(topic_model.get_representative_docs(topic_num))
 
-print("\nProcessing complete! Results saved to 'documents_with_topics.csv' and 'topic_info.csv'")
+print("\nProcessing complete!")

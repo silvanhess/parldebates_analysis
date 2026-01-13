@@ -6,9 +6,9 @@
 Data/
 Outputs/
 Scripts/arc/
-BERT_Finetuning/arc/
+BERT-Finetuning/arc/
+BERTopic/arc/
 
-BERT_Finetuning/*.csv
 # **/files/
 # *.log
 # *.json
