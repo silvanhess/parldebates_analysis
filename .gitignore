@@ -6,8 +6,10 @@
 Data/
 Outputs/
 Scripts/arc/
-BERT-Finetuning/arc/
-BERTopic/arc/
+arc/
+
+# BERT-Finetuning/arc/
+# BERTopic/arc/
 
 # **/files/
 # *.log
