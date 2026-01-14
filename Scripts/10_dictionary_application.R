@@ -17,7 +17,20 @@ german_dictionary_curated <- read.xlsx("german_dictionary_curated.xlsx") |>
 businesses_cleaned <- read_rds("Data/businesses_cleaned.rds")
 subjects <- read_rds("Data/subjects.rds")
 
-# prepare data -----------------------------------------------------------
+# prepare dictionaries ---------------------------------------------------
+
+dictionary_all_cleaned <- german_dictionary_curated |>
+  bind_rows(french_dictionary_curated) |>
+  mutate(
+    keyword_original = str_to_lower(keyword_original),
+    keyword_original = str_replace_all(keyword_original, "[^[:alnum:]'-]", ""),
+    keyword_original = str_squish(keyword_original)
+  )
+
+# save as rds
+write_rds(dictionary_all_cleaned, "Data/dictionary_all_cleaned.rds")
+
+# prepare paragraphs ------------------------------------------------------
 
 paragraphs_words <- paragraphs_cleaned |>
   select(paragraph_id, paragraph) |>
@@ -41,6 +54,7 @@ french_stopwords <- stopwords::stopwords("fr", source = "snowball")
 
 # put together stopwords
 stopwords_all <- tibble(stopwords = c(german_stopwords, french_stopwords))
+write_rds(stopwords_all, "Data/stopwords_all.rds")
 
 paragraphs_words_cleaned <- paragraphs_words |>
   mutate(
@@ -52,17 +66,6 @@ paragraphs_words_cleaned <- paragraphs_words |>
 
 # save as rds
 write_rds(paragraphs_words_cleaned, "Data/paragraphs_words_cleaned.rds")
-
-dictionary_all_cleaned <- german_dictionary_curated |>
-  bind_rows(french_dictionary_curated) |>
-  mutate(
-    keyword_original = str_to_lower(keyword_original),
-    keyword_original = str_replace_all(keyword_original, "[^[:alnum:]'-]", ""),
-    keyword_original = str_squish(keyword_original)
-  )
-
-# save as rds
-# write_rds(dictionary_all_cleaned, "Data/dictionary_all_cleaned.rds")
 
 # apply dictionary --------------------------------------------------------
 
@@ -79,6 +82,9 @@ paragraphs_classified <- paragraphs_words_cleaned |>
   ) |>
   left_join(paragraphs_cleaned, by = join_by(paragraph_id))
 
+# save as rds
+write_rds(paragraphs_classified, "Data/paragraphs_classified.rds")
+
 # # insepect paragraphs
 # transcripts_classified |>
 #   filter(climate_paragraph == TRUE) |>
@@ -90,7 +96,7 @@ paragraphs_classified <- paragraphs_words_cleaned |>
 #   filter(climate_paragraph == TRUE) |>
 #   count(LanguageOfText)
 
-# classify climate relevant businesses -----------------------------------
+# define transcripts and businesses relevant to CC ------------------------
 
 paragraphs_subjects <- left_join(
   paragraphs_classified,
@@ -147,72 +153,26 @@ write_rds(paragraphs_classified_wide, "Data/paragraphs_classified_wide.rds")
 #   pull(Title.x) |>
 #   sample(100)
 
-# prepare for topic modeling ---------------------------------------------
-
-paragraphs_classified_wide <- read_rds("Data/paragraphs_classified_wide.rds")
-paragraphs_words_cleaned <- read_rds("Data/paragraphs_words_cleaned.rds")
-
-# transcripts_climate <- paragraphs_classified_wide |>
-#   filter(climate_transcript == TRUE) |>
-#   distinct(transcript_id, Text) |> 
-#   rename(transcript_text = Text) |> 
-#   mutate(text_length = str_count(transcript_text, "\\S+"))
-
-transcripts_climate <- paragraphs_classified_wide |>
-  filter(climate_transcript == TRUE) |>
-  distinct(transcript_id, paragraph_id) |> 
-  left_join(
-    paragraphs_words_cleaned,
-    by = join_by(paragraph_id),
-    relationship = "one-to-many"
-  ) |> 
-  select(-paragraph) |>
-  group_by(transcript_id) |> 
+climate_business_summary <- paragraphs_classified_wide |>
+  filter(climate_business == TRUE) |>
+  group_by(BusinessShortNumber, Title.x) |>
   summarise(
-    transcript_text = paste(word, collapse = " "),
-    transcript_word_length = str_count(transcript_text, "\\S+"),
-    .groups = "drop"
+    n_paragraphs = n(),
+    n_climate_paragraphs = sum(climate_paragraph),
+    proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
+    climate_business_final = case_when(
+      proportion_climate_paragraphs >= 0.1 ~ TRUE,
+      .default = FALSE
+    )
   )
 
-# # print random transcript text
-# transcripts_climate |> 
-#   slice_sample(n = 10) |> 
-#   pull(transcript_text)
+paragraphs_climate <- paragraphs_classified_wide |> 
+  left_join(climate_business_summary, by = "BusinessShortNumber") |> 
+  filter(climate_business_final == TRUE)
 
-write_csv(
-  transcripts_climate,
-  "Data/transcripts_climate_for_topic_modeling.csv"
-)
-
-# businesses_climate <- paragraphs_classified_wide |> 
-#   filter(climate_business == TRUE) |>
-#   distinct(BusinessShortNumber, Text, BusinessDetails_long) |> 
-#   rename(business_id = BusinessShortNumber, business_text = Text) |> 
-#   # glue business text
-#   group_by(business_id, BusinessDetails_long) |>
-#   summarise(
-#     business_text = paste(business_text, collapse = " "),
-#     # calculate text length in words
-#     text_length = str_count(business_text, "\\S+"),
-#     .groups = "drop"
-#   )
-
-# write_csv(
-#   businesses_climate,
-#   "Data/businesses_climate_for_topic_modeling.csv"
-# )
-
+write_rds(paragraphs_climate, "Data/paragraphs_climate.rds")
 
 # plot results -----------------------------------------------------------
-
-# plot language distribution
-plot_categorical_distribution(
-  paragraphs_climate_wide,
-  group_col = "LanguageOfText",
-  x_label = "Speech Language",
-  title = "Language Distribution in Climate Relevant Businesses",
-  output_path = "Outputs/paragraphs_climate_language_distribution.png"
-) # this includes paragraphs not classified as climate relevant but belonging to a climate relevant business
 
 # plot climate paragraph distribution
 plot_categorical_distribution(
@@ -221,30 +181,6 @@ plot_categorical_distribution(
   x_label = "Climate Relevant Paragraph",
   title = "Distribution of Climate Relevant Paragraphs",
   output_path = "Outputs/paragraphs_climate_class_distribution.png"
-) # this includes only paragraphs directly classified as climate relevant
-
-# plot paragraph distribution in climate relevant businesses
-plot_categorical_distribution(
-  paragraphs_classified_wide,
-  group_col = "climate_business",
-  x_label = "Climate Relevant Business",
-  title = "Distribution of Climate Relevant Businesses",
-  output_path = "Outputs/businesses_climate_paragraph_distribution.png"
-) # this includes paragraphs not classified as climate relevant but belonging to a climate relevant business
-
-# Aggragate to business level
-
-businesses_climate <- paragraphs_classified_wide |>
-  distinct(BusinessShortNumber, climate_business)
-
-# plot climate business distribution
-plot_categorical_distribution(
-  businesses_climate,
-  group_col = "climate_business",
-  x_label = "Climate Relevant Business",
-  label_suffix = "businesses",
-  title = "Distribution of Climate Relevant Businesses",
-  output_path = "Outputs/businesses_climate_class_distribution.png"
 )
 
 # Aggragate to transcript level
@@ -260,4 +196,28 @@ plot_categorical_distribution(
   label_suffix = "transcripts",
   title = "Distribution of Climate Relevant Transcripts",
   output_path = "Outputs/transcripts_climate_class_distribution.png"
-) # this includes paragraphs not classified as climate relevant but belonging to a climate relevant transcript
+)
+
+# Aggragate to business level
+
+businesses_climate <- paragraphs_classified_wide |>
+  distinct(BusinessShortNumber, climate_business)
+
+# plot non-climate vs. climate businesses
+plot_categorical_distribution(
+  businesses_climate,
+  group_col = "climate_business",
+  x_label = "Climate Relevant Business",
+  label_suffix = "businesses",
+  title = "Distribution of Climate Relevant Businesses",
+  output_path = "Outputs/businesses_climate_class_distribution.png"
+)
+
+# plot paragraphs of non-climate vs. climate-businesses
+plot_categorical_distribution(
+  paragraphs_classified_wide,
+  group_col = "climate_business",
+  x_label = "Climate Relevant Business",
+  title = "Distribution of Paragraphs belonging to a Climae Relevant Business",
+  output_path = "Outputs/businesses_climate_paragraph_distribution.png"
+)
