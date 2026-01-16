@@ -12,7 +12,14 @@ paragraphs_words_cleaned <- read_rds("Data/paragraphs_words_cleaned.rds")
 
 paragraphs_climate_summary <- paragraphs_climate |>
   distinct(paragraph_id, paragraph) |> 
-  mutate(paragraph_length = str_count(paragraph, "\\S+"))
+  mutate(paragraph_length = str_count(paragraph, "\\S+")) |> 
+  filter(paragraph_length >= 20) # filter very short paragraphs
+
+write_csv(
+  paragraphs_climate_summary,
+  "Data/paragraphs_climate_for_topic_modeling.csv"
+)
+
 transcripts_climate_summary <- paragraphs_climate |>
   group_by(transcript_id) |>
   summarise(
