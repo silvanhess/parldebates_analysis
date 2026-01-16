@@ -20,3 +20,4 @@ arc/
 **/runs/
 **/wandb/
 **/outputs*/
+/.quarto/

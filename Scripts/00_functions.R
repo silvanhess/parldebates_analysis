@@ -49,6 +49,7 @@ plot_word_count_distribution <- function(
   output_path = NULL
 ) {
   require(ggplot2)
+  require(here)
 
   p <- ggplot(data, aes(x = .data[[word_count_col]])) +
     geom_histogram(fill = fill_color) +
@@ -74,7 +75,7 @@ plot_word_count_distribution <- function(
     )
 
   if (!is.null(output_path)) {
-    ggsave(output_path, plot = p)
+    ggsave(here(output_path), plot = p)
   }
 
   return(p)
@@ -96,6 +97,7 @@ plot_categorical_distribution <- function(
   require(ggplot2)
   require(dplyr)
   require(scales)
+  require(here)
 
   df_grouped <- data |>
     group_by(across(all_of(group_col))) |>
@@ -126,7 +128,7 @@ plot_categorical_distribution <- function(
     )
 
   if (!is.null(output_path)) {
-    ggsave(output_path, plot = p)
+    ggsave(here(output_path), plot = p)
   }
 
   return(p)

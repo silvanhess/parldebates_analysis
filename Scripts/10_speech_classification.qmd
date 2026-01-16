@@ -1,0 +1,230 @@
+---
+title: "Speech Classification"
+output-file: "Outputs/10_speech_classification.pdf"
+format: pdf
+execute:
+  echo: false
+  message: false
+  warning: false
+---
+
+## Setup
+
+Import all necessary packages and functions.
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(openxlsx)
+library(tidytext)
+library(stopwords)
+library(here)
+source(here("Scripts/00_functions.R"))
+```
+
+## Data Import
+
+Read in all presaved data.
+
+```{r}
+#| label: data import
+
+paragraphs_cleaned <- read_rds(here("Data/paragraphs_cleaned.rds"))
+french_dictionary_curated <- read.xlsx(
+  here("french_dictionary_curated.xlsx")) |>
+  rename(keyword_original = keyword_french)
+german_dictionary_curated <- read.xlsx(
+  here("german_dictionary_curated.xlsx")) |>
+  rename(keyword_original = keyword_german)
+businesses_cleaned <- read_rds(
+  here("Data/businesses_cleaned.rds"))
+subjects <- read_rds(here("Data/subjects.rds"))
+```
+
+## Dictionary
+
+Prepare the dictionary.
+
+```{r}
+#| label: dictionary
+
+dictionary_all_cleaned <- german_dictionary_curated |>
+  bind_rows(french_dictionary_curated) |>
+  mutate(
+    keyword_original = str_to_lower(keyword_original),
+    keyword_original = str_replace_all(keyword_original, "[^[:alnum:]'-]", ""),
+    keyword_original = str_squish(keyword_original)
+  )
+
+# save as rds
+write_rds(
+  dictionary_all_cleaned, 
+  here("Data/dictionary_all_cleaned.rds"))
+```
+
+## Data Pre-Processing
+
+Pre-process the data.
+
+```{r}
+#| label: data cleaning
+paragraphs_words <- paragraphs_cleaned |>
+  select(paragraph_id, paragraph) |>
+  unnest_tokens(
+    output = "word",
+    input = "paragraph",
+    token = "words",
+    drop = FALSE
+  )
+
+# get german stopwords from stopwords package
+# add additional stopwords
+german_stopwords <- c(
+  stopwords::stopwords("de", source = "snowball"),
+  "dass"
+) |>
+  sort()
+
+# get french stopwords from stopwords package
+french_stopwords <- stopwords::stopwords("fr", source = "snowball")
+
+# put together stopwords
+stopwords_all <- tibble(stopwords = c(german_stopwords, french_stopwords))
+# write_rds(stopwords_all, "Data/stopwords_all.rds")
+
+paragraphs_words_cleaned <- paragraphs_words |>
+  mutate(
+    word = str_to_lower(word),
+    word = str_replace_all(word, "[^[:alnum:]'-]", ""),
+    word = str_squish(word)
+  ) |>
+  anti_join(stopwords_all, by = join_by(word == stopwords))
+
+# save as rds
+write_rds(paragraphs_words_cleaned, here("Data/paragraphs_words_cleaned.rds"))
+```
+
+## Dictionary Classification
+
+Apply the Dictionary to the Data and count the number of matches.
+
+```{r}
+#| label: apply dictionary
+
+paragraphs_classified <- paragraphs_words_cleaned |>
+  left_join(dictionary_all_cleaned, by = join_by(word == keyword_original)) |>
+  group_by(paragraph_id, paragraph) |>
+  summarise(
+    keywords_found = paste(na.omit(unique(keyword_english)), collapse = ", "),
+    n_keywords_found = sum(!is.na(keyword_english)),
+    climate_paragraph = if_else(n_keywords_found > 0, TRUE, FALSE),
+    .groups = "drop"
+  ) |>
+  left_join(paragraphs_cleaned, by = join_by(paragraph_id))
+
+# save as rds
+write_rds(paragraphs_classified, here("Data/paragraphs_classified.rds"))
+```
+
+The classification happens in three steps. First define businesses that have climate paragraphs as climate_businesses.
+
+```{r}
+#| label: climate businesses
+
+paragraphs_subjects <- left_join(
+  paragraphs_classified,
+  subjects,
+  by = join_by(IdSubject),
+  relationship = "many-to-many"
+)
+
+paragraphs_subjects_businesses <- left_join(
+  paragraphs_subjects,
+  businesses_cleaned,
+  by = join_by(BusinessShortNumber),
+  relationship = "many-to-one"
+)
+
+climate_businesses <- paragraphs_subjects_businesses |>
+  filter(climate_paragraph == TRUE) |>
+  distinct(BusinessShortNumber) |>
+  pull(BusinessShortNumber)
+```
+
+Second define paragraphs that belong to a climate business as climate relevant.
+
+```{r}
+#| label: climate paragraphs
+
+paragraphs_classified_wide <- paragraphs_subjects_businesses |>
+  mutate(
+    climate = case_when(
+      BusinessShortNumber %in% climate_businesses ~ TRUE,
+      .default = FALSE
+    )
+  ) |>
+  rename(paragraph = paragraph.x)
+```
+
+Third define businesses that have at least 10% of the paragraphs that match the dictionary as climate_business_final.
+
+```{r}
+paragraphs_classified_wide_final <- paragraphs_classified_wide |>
+group_by(BusinessShortNumber) |>
+mutate(
+  n_paragraphs = n(),
+  n_climate_paragraphs = sum(climate_paragraph),
+  proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
+  final_climate = case_when(
+    proportion_climate_paragraphs >= 0.1 ~ TRUE,
+    .default = FALSE
+  ),
+  .groups = "drop"
+)
+
+write_rds(
+  paragraphs_classified_wide_final, 
+  here("Data/paragraphs_classified_wide_final.rds"))
+```
+
+# Visualize
+
+Let's visualize the data. First show many paragraphs are climate relevant vs. non-relevant.
+
+```{r}
+plot_categorical_distribution(
+  paragraphs_classified_wide_final,
+  group_col = "final_climate",
+  x_label = "Climate Relevant Paragraph",
+  title = "Distribution of Climate Relevant Paragraphs",
+  output_path = "Outputs/paragraphs_climate_distribution.png"
+)
+```
+
+Show how many businesses are climate relevant vs. non-relevant
+
+```{r}
+df_grouped <- paragraphs_classified_wide_final |> 
+  distinct(BusinessShortNumber, final_climate)
+
+plot_categorical_distribution(
+  df_grouped,
+  group_col = "final_climate",
+  x_label = "Climate Relevant Businesses",
+  y_label = "Percentage of Businesses",
+  label_suffix = "businesses",
+  title = "Distribution of Climate Relevant Businesses",
+  output_path = "Outputs/paragraphs_climate_distribution.png"
+)
+```
+
+## R Code
+
+For better readability, all the code from the document is added here:
+
+```{r ref.label=knitr::all_labels()}
+#| echo: true
+#| eval: false
+
+```
