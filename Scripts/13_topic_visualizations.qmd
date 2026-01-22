@@ -1,8 +1,30 @@
-# libraries --------------------------------------------------------------
+---
+title: "Topic Visualizations"
+format: pdf
+execute:
+  echo: false
+  message: false
+  warning: false
+---
+
+## Setup
+
+Import all necessary packages and functions.
+
+```{r}
+#| label: setup
 
 library(tidyverse)
+library(here)
+source(here("Scripts/00_functions.R"))
+```
 
-# import data ------------------------------------------------------------
+## Data Import
+
+Read in all presaved data.
+
+```{r}
+#| label: data import
 
 documents_with_topics <- read_csv("Data/documents_with_topics.csv") |>
   mutate(
@@ -12,19 +34,22 @@ documents_with_topics <- read_csv("Data/documents_with_topics.csv") |>
 topic_info <- read_csv("Data/topic_info.csv") |>
   rename(topic = Topic, topic_name = Name) |>
   mutate(topic = as.character(topic))
-
-# paragraphs_classified_wide <- read_rds("Data/paragraphs_classified_wide.rds")
 paragraphs_climate <- read_rds("Data/paragraphs_climate.rds")
+```
 
-# plot political parties per topic ---------------------------------------
+## Visualization
 
+Let's visualize the parties per topic.
+
+
+```{r}
 documents_with_topics_wide <- documents_with_topics |>
   left_join(topic_info, by = join_by(topic)) |>
   filter(
     topic != -1, # filter out outlier topic
     # topic %in% c(1, 2, 5, 6, 7, 11) # 1st cluster
     # topic %in% c(3, 4, 8, 9, 13) # 2nd cluster
-    topic %in% c(0, 10, 12) # 3rd cluster
+    # topic %in% c(0, 10, 12) # 3rd cluster
   ) 
 
 paragraphs_topics_wide <- documents_with_topics_wide |>
@@ -102,3 +127,4 @@ labs(
   theme(legend.position = "right")
 
 ggsave("Outputs/topic_party_distribution.png")
+```

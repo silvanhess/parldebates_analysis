@@ -7,7 +7,7 @@ library(future)
 
 # Step 1: Load the dataset
 df <- read_rds("Data/labeled_dataset_cleaned.rds") |>
-  filter(final_climate == TRUE)
+  filter(climate == TRUE)
 
 # Initialize keywords column
 df$keywords <- NA_character_

@@ -30,7 +30,7 @@ labeled_dataset_cleaned <-
     WordCount = str_count(paragraph, "\\S+")
   ) |>
   rename(
-    final_climate = sentiment,
+    climate = sentiment,
     LanguageOfText = LanguageOfText.x
   ) |>
   select(
@@ -89,7 +89,7 @@ plot_categorical_distribution(
 # plot distribution of final climate labels
 plot_categorical_distribution(
   data = labeled_dataset_cleaned,
-  group_col = "final_climate",
+  group_col = "climate",
   x_label = "Class",
   title = "Distribution of Climate Related Paragraphs in Labeled Paragraphs",
   output_path = "Outputs/labeled_paragraphs_class_distribution.png"
