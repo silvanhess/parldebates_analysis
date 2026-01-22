@@ -1,0 +1,158 @@
+---
+title: "Businesses"
+format: pdf
+execute:
+  warning: false
+---
+
+## Setup
+
+Import all necessary packages and functions.
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(swissparl)
+library(furrr)
+```
+
+## Download Businesses
+
+For all businesses dealt with in Parliament between 2016 and 2025, businesses that were submitted before 2016 are also necessary. Therefore, I download all businesses from the first session in 2010 until the session of fall 2025.
+
+```{r}
+yr = 2010:2025
+
+get_businesses <- function(yr) {
+  folder <- "Data/businesses"
+  if (!dir.exists(folder)) {
+    dir.create(folder)
+  }
+
+  out_file <- file.path(folder, paste0(yr, ".rds"))
+  if (file.exists(out_file)) {
+    return(NULL)
+  } # skip existing files
+
+  dt <- get_data(
+    "Business",
+    SubmissionDate = c(
+      paste(">", yr, "-01-01", sep = ""),
+      paste("<", yr, "-12-31", sep = "")
+    ),
+    Language = "EN"
+  )
+
+  write_rds(dt, file.path(folder, paste0(yr, ".rds")))
+}
+
+walk(
+  yr,
+  get_businesses,
+  .progress = TRUE
+)
+
+businesses <- map_dfr(
+  list.files("Data/businesses", full.names = T),
+  read_rds
+)
+write_rds(businesses, "Data/businesses.rds")
+```
+
+## Inspect Businesses
+
+Now that I have all the businesses, I can start to inspect the data. Let's see what's inside the business tags.
+
+```{r}
+businesses |>
+  separate_rows(Tags, TagNames, sep = "\\|") |>
+  count(Tags, TagNames) |>
+  print(n = Inf)
+```
+
+Take a close look inside one of the business tags (e.g. "Energie").
+
+```{r}
+businesses |>
+  filter(str_detect(TagNames, "Energie")) |>
+  count(Title) |>
+  arrange(desc(n)) |>
+  print(n = 10)
+```
+
+Insepct the different business statuses.
+
+```{r}
+businesses |>
+  count(BusinessStatus, BusinessStatusText) |>
+  arrange(n) |>
+  print(n = Inf)
+```
+
+What about the business types?
+
+```{r}
+businesses |>
+  count(BusinessType, BusinessTypeName) |>
+  arrange(n) |>
+  print(n = Inf)
+```
+
+## Clean Businesses
+
+Here I do all the Cleaning of the business data frame and store it for later use. The filter I applied serves the purpose of reducing the amount of businesses and only keep those that can have debates in the parliament.
+
+### Business Types
+
+Here i filter **out** business types that have debates in the parliament. These are the following:
+
+```{r}
+businesses |> 
+  filter(BusinessType %in% c(18, 19, 10, 8, 14)) |> 
+  distinct(BusinessType, BusinessTypeName)
+```
+
+### Business Status
+
+Here I filter **for** business statuses that with a high cchance already had a dabeate in the parliament. These are the following:
+
+```{r}
+businesses |> 
+  filter(BusinessStatus %in% c(219, 222, 232, 229, 218, 215, 220)) |> 
+  distinct(BusinessStatus, BusinessStatusText)
+```
+
+### Business Tags
+
+There are businesses with tags that have a higher chance of being a business which is climate related. I flag them here so I can use this flag later when I will create a handcoding dataset. These are the following:
+
+```{r}
+businesses |> 
+  separate_rows(Tags, TagNames, sep = "\\|") |>
+  filter(Tags %in% c(52,48,66)) |> 
+  distinct(Tags, TagNames)
+```
+
+Businesses with the Tag 
+
+### Business Details
+
+There are other variables that hold business information that might be useful for later analysis. For this purpose I create variables that summarise this information.
+
+```{r}
+businesses_cleaned <- businesses |>
+  filter(
+    !(BusinessType %in% c(18, 19, 10, 8, 14)),
+    BusinessStatus %in% c(219, 222, 232, 229, 218, 215, 220)
+  ) |>
+  mutate(
+    business_details_short = ifelse(is.na(Description), SubmittedText, Description),
+    business_details_long = paste(business_details_short, ReasonText),
+    business_details_short_length = str_length(business_details_short),
+    BusinessDetails_long_length = str_length(business_details_long),
+    business_tag_climate = str_detect(Tags, "52|48|66"),
+  )
+
+write_rds(businesses_cleaned, "Data/businesses_cleaned.rds")
+```
