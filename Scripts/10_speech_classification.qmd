@@ -1,6 +1,5 @@
 ---
 title: "Speech Classification"
-output-file: "Outputs/10_speech_classification.pdf"
 format: pdf
 execute:
   echo: false
@@ -20,6 +19,7 @@ library(openxlsx)
 library(tidytext)
 library(stopwords)
 library(here)
+library(zoo)
 source(here("Scripts/00_functions.R"))
 ```
 
@@ -167,7 +167,7 @@ paragraphs_classified_wide <- paragraphs_subjects_businesses |>
   rename(paragraph = paragraph.x)
 ```
 
-Third define businesses that have at least 10% of the paragraphs that match the dictionary as climate_business_final.
+Third define businesses that have at least 10% of the paragraphs that match the dictionary as final_climate.
 
 ```{r}
 paragraphs_classified_wide_final <- paragraphs_classified_wide |>
@@ -219,9 +219,119 @@ plot_categorical_distribution(
 )
 ```
 
+In absolute terms, the number of climate relevant paragraphs in comparison to non-climate paragraphs developed like this.
+
+```{r}
+# in absolute terms
+df_grouped <- paragraphs_classified_wide_final |> 
+  mutate(meeting_date = as.Date(Start)) |> 
+  group_by(meeting_date, final_climate) |> 
+  summarise(count = n(), .groups = "drop")
+
+ggplot(df_grouped, aes(x = meeting_date, y = count, color = final_climate)) +
+  geom_line(size = 1) +
+  geom_point() +
+  labs(
+    title = "Climate vs. Non-Climate Paragraphs over Time",
+    x = "Date",
+    y = "Number of Paragraphs",
+    color = "Climate"
+  ) +
+  theme_minimal()
+```
+
+Show how the proportion of climate relevant paragraphs developed over the last 10 years.
+
+```{r}
+# in relative terms
+share <- paragraphs_classified_wide_final |> 
+  mutate(meeting_date = as.Date(Start)) |> 
+  group_by(meeting_date) |> 
+  summarise(share_climate = mean(final_climate) * 100) |> 
+  arrange(meeting_date) |> 
+  mutate(rolling_avg = rollmean(share_climate, k = 30, fill = NA))
+
+ggplot(share, aes(x = meeting_date)) +
+  geom_line(aes(y = share_climate), alpha = 0.3, color = "gray50") +
+  geom_line(aes(y = rolling_avg), color = "steelblue", size = 1) +
+    labs(
+    title = "Share of Climate Related Debates",
+    x = "Date",
+    y = "Share (%)"
+  ) +
+  theme_minimal()
+ggsave(here("Outputs/timeseries_plot.png"))
+```
+
+Let's see which parties have been most active in climate debates over time.
+
+```{r}
+party_names_order <- c(
+  "Sozialdemokratische Fraktion",
+  "Grüne Fraktion", 
+  "Die Mitte-Fraktion / CVP-Fraktion",
+  "Grünliberale Fraktion",
+  "FDP-Liberale Fraktion",
+  "Fraktion der Schweizerischen Volkspartei"
+)
+party_colors <- c(
+  "Sozialdemokratische Fraktion" = "#E4032E",
+  "Grüne Fraktion" = "#84B547",
+  "Die Mitte-Fraktion / CVP-Fraktion" = "#FF8C00",
+  "Grünliberale Fraktion" = "#650959ff",
+  "FDP-Liberale Fraktion" = "#0571C1",
+  "Fraktion der Schweizerischen Volkspartei" = "#00843D"
+)
+
+share <- paragraphs_classified_wide_final |> 
+  filter(final_climate == TRUE) |> 
+  mutate(
+    meeting_date = as.Date(Start),
+    ParlGroupName = case_when(
+      ParlGroupAbbreviation == "M-E" ~ "Die Mitte-Fraktion / CVP-Fraktion",
+      .default = ParlGroupName
+    )
+  ) |> 
+  group_by(meeting_date) |> 
+  mutate(total_climate = n()) |> 
+  group_by(meeting_date, ParlGroupName) |> 
+  summarise(
+    share_party = (n() / first(total_climate)) * 100,
+    .groups = "drop") |> 
+  mutate(
+    ParlGroupName = factor(ParlGroupName, levels = party_names_order)) |>
+  arrange(meeting_date, ParlGroupName) |> 
+  group_by(ParlGroupName) |> 
+  mutate(rolling_avg = rollmean(share_party, k = 30, fill = NA)) |> 
+  drop_na(ParlGroupName)
+
+ggplot(share, aes(x = meeting_date, y = rolling_avg, color = ParlGroupName)) +
+  geom_line(size = 1) +
+  scale_color_manual(values = party_colors) +
+  labs(
+    title = "Share of Climate Related Debates per Party",
+    x = "Date",
+    y = "Share (%)",
+    color = "Party Group"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 9)
+  ) +
+  guides(color = guide_legend(nrow = 2))
+ggsave(here("Outputs/timeseries_plot_per_party.png"), width = 10, height = 8)
+```
+
+There was a time when the mainstream right and populist right parties dominated the climate debate until around 2021, after which it became much more balanced between the parties, with the Greens having the largest share of the discussion.
+
+Interestingly, the proportion of speeches made by the Greens and Green Liberals diverges sharply from 2020 onwards.
+
+The graph does not take into account the size of the parliamentary groups. On average, the mainstream left and mainstream right have a larger share than the Greens and Green Liberals, with the right-wing populist SVP having the largest share in parliament (Source: https://www.parlament.ch/de/organe/fraktionen/).
+
 ## R Code
 
-For better readability, all the code from the document is added here:
+For better readability of the document and transparency of the results, all the code from the document is added here:
 
 ```{r ref.label=knitr::all_labels()}
 #| echo: true
