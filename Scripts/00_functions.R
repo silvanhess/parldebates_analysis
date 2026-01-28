@@ -35,7 +35,7 @@ deepl_translate <- function(
   result$translations[[1]]$text
 }
 
-# Histogramm für Wortanzahl-Verteilung
+# Histogram for Word Count Distribution
 plot_word_count_distribution <- function(
   data,
   word_count_col = "WordCount",
@@ -82,7 +82,7 @@ plot_word_count_distribution <- function(
 }
 
 
-# Säulendiagramm für kategorische Verteilung
+# Barplot for categorical distribution
 plot_categorical_distribution <- function(
   data,
   group_col,

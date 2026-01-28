@@ -23,7 +23,7 @@ For all businesses dealt with in Parliament between 2016 and 2025, businesses th
 
 ```{r}
 yr = 2010:2025
-
+# todo: add here() to the paths
 get_businesses <- function(yr) {
   folder <- "Data/businesses"
   if (!dir.exists(folder)) {

@@ -2,8 +2,6 @@
 title: "Topic Visualizations"
 format: pdf
 execute:
-  echo: false
-  message: false
   warning: false
 ---
 
@@ -26,21 +24,21 @@ Read in all presaved data.
 ```{r}
 #| label: data import
 
-documents_with_topics <- read_csv("Data/documents_with_topics.csv") |>
+documents_with_topics <- read_csv(here("Data/documents_with_topics.csv")) |>
   mutate(
     transcript_id = as.character(transcript_id),
     topic = as.character(topic)
   )
-topic_info <- read_csv("Data/topic_info.csv") |>
+topic_info <- read_csv(here("Data/topic_info.csv")) |>
   rename(topic = Topic, topic_name = Name) |>
   mutate(topic = as.character(topic))
-paragraphs_climate <- read_rds("Data/paragraphs_climate.rds")
+paragraphs_climate <- read_rds(here("Data/paragraphs_classified_wide_final.rds")) |> 
+    filter(final_climate == TRUE)
 ```
 
 ## Visualization
 
 Let's visualize the parties per topic.
-
 
 ```{r}
 documents_with_topics_wide <- documents_with_topics |>
@@ -110,21 +108,24 @@ df_with_names <- df_plot |>
   )
 
 # Create plot with legend
-ggplot(
-  df_with_names,
-  aes(x = ParlGroupAbbreviation, y = pct_of_topic, fill = ParlGroupName)
-) +
-  geom_col() +
-  facet_wrap(vars(topic_name)) +
-  scale_fill_manual(values = party_colors)
-labs(
-  x = "Parliamentary Group",
-  y = "Percentage of Speeches",
-  title = "Speeches per Party and Topic",
-  fill = "Party Name"
-) +
-  theme_minimal() +
-  theme(legend.position = "right")
-
-ggsave("Outputs/topic_party_distribution.png")
+p <- ggplot(
+	df_with_names,
+	aes(x = ParlGroupAbbreviation, y = pct_of_topic)
+	) +
+	geom_col() +
+	facet_wrap(vars(topic_name)) +
+	labs(
+		x = "Parliamentary Group",
+		y = "Percentage of Speeches",
+		title = "Speeches per Party and Topic",
+		fill = "Party Name"
+	) +
+  theme_minimal() #+
+  # theme(
+  #   legend.position = "bottom",
+  #   legend.text = element_text(size = 9)
+  #   )
+ggsave(here("Outputs/13_plot_topic_party_distribution.png"))
+write_rds(p, here("Outputs/13_plot_topic_party_distribution.rds"))
 ```
+

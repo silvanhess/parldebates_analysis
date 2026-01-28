@@ -2,8 +2,6 @@
 title: "Speech Classification"
 format: pdf
 execute:
-  echo: false
-  message: false
   warning: false
 ---
 
@@ -188,18 +186,21 @@ write_rds(
   here("Data/paragraphs_classified_wide_final.rds"))
 ```
 
+Important: The climate related debates are therefore based on the nature of the discussed parliamentary business. If the business is considered climate related, all debates around this business are considered climate related.
+
 # Visualize
 
 Let's visualize the data. First show many paragraphs are climate relevant vs. non-relevant.
 
 ```{r}
-plot_categorical_distribution(
+p <- plot_categorical_distribution(
   paragraphs_classified_wide_final,
   group_col = "final_climate",
   x_label = "Climate Relevant Paragraph",
   title = "Distribution of Climate Relevant Paragraphs",
-  output_path = "Outputs/paragraphs_climate_distribution.png"
+  output_path = "Outputs/10_paragraphs_climate_distribution.png"
 )
+write_rds(p, here("Outputs/10_paragraphs_climate_distribution.rds"))
 ```
 
 Show how many businesses are climate relevant vs. non-relevant
@@ -208,15 +209,16 @@ Show how many businesses are climate relevant vs. non-relevant
 df_grouped <- paragraphs_classified_wide_final |> 
   distinct(BusinessShortNumber, final_climate)
 
-plot_categorical_distribution(
+p <- plot_categorical_distribution(
   df_grouped,
   group_col = "final_climate",
   x_label = "Climate Relevant Businesses",
   y_label = "Percentage of Businesses",
   label_suffix = "businesses",
   title = "Distribution of Climate Relevant Businesses",
-  output_path = "Outputs/paragraphs_climate_distribution.png"
+  output_path = "Outputs/10_paragraphs_climate_distribution.png"
 )
+write_rds(p, here("Outputs/10_paragraphs_climate_distribution.rds"))
 ```
 
 In absolute terms, the number of climate relevant paragraphs in comparison to non-climate paragraphs developed like this.
@@ -228,7 +230,7 @@ df_grouped <- paragraphs_classified_wide_final |>
   group_by(meeting_date, final_climate) |> 
   summarise(count = n(), .groups = "drop")
 
-ggplot(df_grouped, aes(x = meeting_date, y = count, color = final_climate)) +
+p <- ggplot(df_grouped, aes(x = meeting_date, y = count, color = final_climate)) +
   geom_line(size = 1) +
   geom_point() +
   labs(
@@ -238,6 +240,8 @@ ggplot(df_grouped, aes(x = meeting_date, y = count, color = final_climate)) +
     color = "Climate"
   ) +
   theme_minimal()
+ggsave(here("Outputs/10_plot_timeseries_absolute.png"))
+write_rds(p, here("Outputs/10_plot_timeseries_absolute.rds"))
 ```
 
 Show how the proportion of climate relevant paragraphs developed over the last 10 years.
@@ -251,7 +255,7 @@ share <- paragraphs_classified_wide_final |>
   arrange(meeting_date) |> 
   mutate(rolling_avg = rollmean(share_climate, k = 30, fill = NA))
 
-ggplot(share, aes(x = meeting_date)) +
+p <- ggplot(share, aes(x = meeting_date)) +
   geom_line(aes(y = share_climate), alpha = 0.3, color = "gray50") +
   geom_line(aes(y = rolling_avg), color = "steelblue", size = 1) +
     labs(
@@ -260,7 +264,8 @@ ggplot(share, aes(x = meeting_date)) +
     y = "Share (%)"
   ) +
   theme_minimal()
-ggsave(here("Outputs/timeseries_plot.png"))
+ggsave(here("Outputs/10_plot_timeseries_relative.png"))
+write_rds(p, here("Outputs/10_plot_timeseries_relative.rds"))
 ```
 
 Let's see which parties have been most active in climate debates over time.
@@ -305,7 +310,7 @@ share <- paragraphs_classified_wide_final |>
   mutate(rolling_avg = rollmean(share_party, k = 30, fill = NA)) |> 
   drop_na(ParlGroupName)
 
-ggplot(share, aes(x = meeting_date, y = rolling_avg, color = ParlGroupName)) +
+p <- ggplot(share, aes(x = meeting_date, y = rolling_avg, color = ParlGroupName)) +
   geom_line(size = 1) +
   scale_color_manual(values = party_colors) +
   labs(
@@ -320,7 +325,8 @@ ggplot(share, aes(x = meeting_date, y = rolling_avg, color = ParlGroupName)) +
     legend.text = element_text(size = 9)
   ) +
   guides(color = guide_legend(nrow = 2))
-ggsave(here("Outputs/timeseries_plot_per_party.png"), width = 10, height = 8)
+ggsave(here("Outputs/10_plot_timeseries_per_party.png"), width = 10, height = 8)
+write_rds(p, here("Outputs/10_plot_timeseries_per_party.rds"))
 ```
 
 There was a time when the mainstream right and populist right parties dominated the climate debate until around 2021, after which it became much more balanced between the parties, with the Greens having the largest share of the discussion.
@@ -329,12 +335,3 @@ Interestingly, the proportion of speeches made by the Greens and Green Liberals 
 
 The graph does not take into account the size of the parliamentary groups. On average, the mainstream left and mainstream right have a larger share than the Greens and Green Liberals, with the right-wing populist SVP having the largest share in parliament (Source: https://www.parlament.ch/de/organe/fraktionen/).
 
-## R Code
-
-For better readability of the document and transparency of the results, all the code from the document is added here:
-
-```{r ref.label=knitr::all_labels()}
-#| echo: true
-#| eval: false
-
-```
