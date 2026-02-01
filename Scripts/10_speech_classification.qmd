@@ -201,6 +201,9 @@ p <- plot_categorical_distribution(
   output_path = "Outputs/10_paragraphs_climate_distribution.png"
 )
 write_rds(p, here("Outputs/10_paragraphs_climate_distribution.rds"))
+
+# show the plot
+p
 ```
 
 Show how many businesses are climate relevant vs. non-relevant
@@ -219,6 +222,9 @@ p <- plot_categorical_distribution(
   output_path = "Outputs/10_paragraphs_climate_distribution.png"
 )
 write_rds(p, here("Outputs/10_paragraphs_climate_distribution.rds"))
+
+# show the plot
+p
 ```
 
 In absolute terms, the number of climate relevant paragraphs in comparison to non-climate paragraphs developed like this.
@@ -242,6 +248,9 @@ p <- ggplot(df_grouped, aes(x = meeting_date, y = count, color = final_climate))
   theme_minimal()
 ggsave(here("Outputs/10_plot_timeseries_absolute.png"))
 write_rds(p, here("Outputs/10_plot_timeseries_absolute.rds"))
+
+# show the plot
+p
 ```
 
 Show how the proportion of climate relevant paragraphs developed over the last 10 years.
@@ -266,6 +275,9 @@ p <- ggplot(share, aes(x = meeting_date)) +
   theme_minimal()
 ggsave(here("Outputs/10_plot_timeseries_relative.png"))
 write_rds(p, here("Outputs/10_plot_timeseries_relative.rds"))
+
+# show the plot
+p
 ```
 
 Let's see which parties have been most active in climate debates over time.
@@ -282,7 +294,7 @@ party_names_order <- c(
 party_colors <- c(
   "Sozialdemokratische Fraktion" = "#E4032E",
   "Grüne Fraktion" = "#84B547",
-  "Die Mitte-Fraktion / CVP-Fraktion" = "#FF8C00",
+  "Die Mitte-Fraktion / CVP-& BD-Fraktion" = "#FF8C00",
   "Grünliberale Fraktion" = "#650959ff",
   "FDP-Liberale Fraktion" = "#0571C1",
   "Fraktion der Schweizerischen Volkspartei" = "#00843D"
@@ -293,7 +305,7 @@ share <- paragraphs_classified_wide_final |>
   mutate(
     meeting_date = as.Date(Start),
     ParlGroupName = case_when(
-      ParlGroupAbbreviation == "M-E" ~ "Die Mitte-Fraktion / CVP-Fraktion",
+      ParlGroupAbbreviation == "M-E|BD" ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
       .default = ParlGroupName
     )
   ) |> 
@@ -327,6 +339,9 @@ p <- ggplot(share, aes(x = meeting_date, y = rolling_avg, color = ParlGroupName)
   guides(color = guide_legend(nrow = 2))
 ggsave(here("Outputs/10_plot_timeseries_per_party.png"), width = 10, height = 8)
 write_rds(p, here("Outputs/10_plot_timeseries_per_party.rds"))
+
+# show the plot
+p
 ```
 
 There was a time when the mainstream right and populist right parties dominated the climate debate until around 2021, after which it became much more balanced between the parties, with the Greens having the largest share of the discussion.

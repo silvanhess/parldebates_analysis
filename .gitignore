@@ -21,3 +21,5 @@ arc/
 **/wandb/
 **/outputs*/
 /.quarto/
+
+**/*.quarto_ipynb
