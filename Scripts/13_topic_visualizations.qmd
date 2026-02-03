@@ -53,11 +53,11 @@ paragraphs_topics_wide <- documents_with_topics_wide |>
   ) |>
   drop_na(ParlGroupAbbreviation)
 
-# Define party order and colors (matching first plot)
+# Define party order and colors
 party_names_order <- c(
   "Sozialdemokratische Fraktion",
   "Grüne Fraktion", 
-  "Die Mitte-Fraktion / CVP-Fraktion",
+  "Die Mitte-Fraktion / CVP-& BD-Fraktion",
   "Grünliberale Fraktion",
   "FDP-Liberale Fraktion",
   "Fraktion der Schweizerischen Volkspartei"
@@ -76,7 +76,7 @@ df_plot <- paragraphs_topics_wide |>
   filter(ParlGroupAbbreviation != "BD") |>
   mutate(
     ParlGroupName = case_when(
-      ParlGroupAbbreviation == "M-E|BD" ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
+      ParlGroupAbbreviation %in% c("M-E", "BD") ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
       .default = ParlGroupName
     )
   ) |>

@@ -1,11 +1,11 @@
 ---
 title: "Businesses"
-format: pdf
+format: html
 execute:
   warning: false
 ---
 
-## Setup
+# Setup
 
 Import all necessary packages and functions.
 
@@ -15,17 +15,17 @@ Import all necessary packages and functions.
 library(tidyverse)
 library(swissparl)
 library(furrr)
+library(here)
 ```
 
-## Download Businesses
+# Download Businesses
 
 For all businesses dealt with in Parliament between 2016 and 2025, businesses that were submitted before 2016 are also necessary. Therefore, I download all businesses from the first session in 2010 until the session of fall 2025.
 
 ```{r}
 yr = 2010:2025
-# todo: add here() to the paths
 get_businesses <- function(yr) {
-  folder <- "Data/businesses"
+  folder <- here("Data/businesses")
   if (!dir.exists(folder)) {
     dir.create(folder)
   }
@@ -54,14 +54,13 @@ walk(
 )
 
 businesses <- map_dfr(
-  list.files("Data/businesses", full.names = T),
+  list.files(here("Data/businesses"), full.names = T),
   read_rds
 )
-write_rds(businesses, "Data/businesses.rds")
+write_rds(businesses, here("Data/businesses.rds"))
 ```
 
-## Inspect Businesses
-
+# Inspect Businesses
 Now that I have all the businesses, I can start to inspect the data. Let's see what's inside the business tags.
 
 ```{r}
@@ -99,11 +98,11 @@ businesses |>
   print(n = Inf)
 ```
 
-## Clean Businesses
+# Clean Businesses
 
 Here I do all the Cleaning of the business data frame and store it for later use. The filter I applied serves the purpose of reducing the amount of businesses and only keep those that can have debates in the parliament.
 
-### Business Types
+## Business Types
 
 Here i filter **out** business types that have debates in the parliament. These are the following:
 
@@ -113,7 +112,7 @@ businesses |>
   distinct(BusinessType, BusinessTypeName)
 ```
 
-### Business Status
+## Business Status
 
 Here I filter **for** business statuses that with a high cchance already had a dabeate in the parliament. These are the following:
 
@@ -123,7 +122,7 @@ businesses |>
   distinct(BusinessStatus, BusinessStatusText)
 ```
 
-### Business Tags
+## Business Tags
 
 There are businesses with tags that have a higher chance of being a business which is climate related. I flag them here so I can use this flag later when I will create a handcoding dataset. These are the following:
 
@@ -134,11 +133,9 @@ businesses |>
   distinct(Tags, TagNames)
 ```
 
-Businesses with the Tag 
+## Business Details
 
-### Business Details
-
-There are other variables that hold business information that might be useful for later analysis. For this purpose I create variables that summarise this information.
+There are other variables that hold business information that might be useful for later analysis. For this purpose I create variables that summarise this information. Next, I perform all the preprocessing steps and store the cleaned data frame.
 
 ```{r}
 businesses_cleaned <- businesses |>
@@ -154,5 +151,5 @@ businesses_cleaned <- businesses |>
     business_tag_climate = str_detect(Tags, "52|48|66"),
   )
 
-write_rds(businesses_cleaned, "Data/businesses_cleaned.rds")
+write_rds(businesses_cleaned, here("Data/businesses_cleaned.rds"))
 ```
