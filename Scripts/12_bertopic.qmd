@@ -2,7 +2,7 @@
 title: BERTopic Analysis with OpenAI Representation
 jupyter: bertopic_env
 format: html
-    number-sections: true
+  number-sections: true
 ---
 
 This notebook performs topic modeling on climate-related transcripts using BERTopic with multiple representation models including OpenAI's GPT-4o-mini for generating human-readable topic labels.

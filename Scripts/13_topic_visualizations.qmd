@@ -5,7 +5,7 @@ execute:
   warning: false
 ---
 
-## Setup
+# Setup
 
 Import all necessary packages and functions.
 
@@ -14,46 +14,59 @@ Import all necessary packages and functions.
 
 library(tidyverse)
 library(here)
-source(here("Scripts/00_functions.R"))
+library(knitr)
 ```
 
-## Data Import
+# Data Import
 
 Read in all presaved data.
 
 ```{r}
 #| label: data import
 
+# todo: data sources mit der neuen version ersetzen (12_filename.csv)
+
 documents_with_topics <- read_csv(here("Data/documents_with_topics.csv")) |>
   mutate(
     transcript_id = as.character(transcript_id),
-    topic = as.character(topic)
-  )
+    topic = sprintf("%02d", as.numeric(topic))
+  ) |> 
+  filter(topic != -1)
+
 topic_info <- read_csv(here("Data/topic_info.csv")) |>
   rename(topic = Topic, topic_name = Name) |>
-  mutate(topic = as.character(topic))
+  mutate(topic = sprintf("%02d", as.numeric(topic))
+  ) |> 
+  filter(topic != -1)
+
 paragraphs_climate <- read_rds(here("Data/paragraphs_classified_wide_final.rds")) |> 
-    filter(final_climate == TRUE)
+    filter(final_climate == TRUE) |> 
+    mutate(
+    ParlGroupName = case_when(
+      ParlGroupAbbreviation %in% c("M-E", "BD") ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
+      .default = ParlGroupName
+    )
+  )
 ```
 
-## Visualization
-
-Let's visualize the parties per topic.
+# Data Preparation
 
 ```{r}
 documents_with_topics_wide <- documents_with_topics |>
-  left_join(topic_info, by = join_by(topic)) |>
-  filter(topic != -1)
+  left_join(topic_info, by = join_by(topic))
 
 paragraphs_topics_wide <- documents_with_topics_wide |>
   inner_join(
     paragraphs_climate,
     by = join_by(transcript_id),
-    relationship = "many-to-many"
+    relationship = "one-to-many" # has multiple paragraphs per transcript
   ) |>
   drop_na(ParlGroupAbbreviation)
+```
 
-# Define party order and colors
+# Visualization Setup
+
+```{r}
 party_names_order <- c(
   "Sozialdemokratische Fraktion",
   "Grüne Fraktion", 
@@ -71,107 +84,147 @@ party_colors <- c(
   "FDP-Liberale Fraktion" = "#0571C1",
   "Fraktion der Schweizerischen Volkspartei" = "#00843D"
 )
+```
 
-df_plot <- paragraphs_topics_wide |>
-  filter(ParlGroupAbbreviation != "BD") |>
+# Visualize Topic Representation
+
+Let's first look what each topic represents.
+
+```{r}
+topic_representation <- topic_info |> 
+  select(topic, OpenAI)
+write_rds(topic_representation, here("Outputs/13_topic_representation.rds"))
+topic_representation %>%
+  kable(
+    caption = "Topic Representation based on OpenAI summaries",
+    col.names = c("Topic", "Representation")
+  )
+```
+
+# Visualize Topic Distribution
+
+Let's first look at the overall distribution of topics.
+
+```{r}
+df_topic_distribution <- paragraphs_topics_wide %>%
+  group_by(topic) %>%
+  summarise(n_paragraphs = n()) %>%
   mutate(
-    ParlGroupName = case_when(
-      ParlGroupAbbreviation %in% c("M-E", "BD") ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
-      .default = ParlGroupName
-    )
-  ) |>
-  group_by(topic_name, ParlGroupName) |>
+    topic = factor(topic, levels = rev(sort(unique(topic)))),
+    pct_total = n_paragraphs / sum(n_paragraphs) * 100
+  )
+
+plot <- ggplot(df_topic_distribution, aes(x = topic, y = pct_total)) +
+  geom_col(fill = "steelblue") +
+  geom_text(aes(label = paste0(round(pct_total, 1), "%")), 
+            hjust = -0.2, size = 3) +
+  coord_flip() +
+  labs(
+    x = "Topic",
+    y = "Percentage of Total Paragraphs",
+    title = "Distribution of Paragraphs across Topics"
+  ) +
+  theme_minimal()
+
+ggsave(here("Outputs/13_plot_topic_distribution.png"))
+write_rds(plot, here("Outputs/13_plot_topic_distribution.rds"))
+
+# show the plot
+plot
+```
+
+# Visualize All Topics per Party
+
+Let's visualize the parties per topic.
+
+```{r}
+df_plot <- paragraphs_topics_wide |>
+  group_by(topic, ParlGroupName) |>
   summarise(
     group_count = n(),
     .groups = 'drop_last'
   ) |>
   mutate(
-    pct_of_topic = group_count / sum(group_count),
+    pct_of_topic = group_count / sum(group_count) * 100,
     ParlGroupName = factor(ParlGroupName, levels = party_names_order)
   ) |>
   drop_na()
 
-# Create plot with consistent colors and ordering
-p <- ggplot(
+plot <- ggplot(
   df_plot,
-  aes(x = ParlGroupName, y = pct_of_topic, fill = ParlGroupName)
+  aes(x = "", y = pct_of_topic, fill = ParlGroupName)
 ) +
   geom_col() +
-  facet_wrap(vars(topic_name)) +
+  coord_polar("y", start = 0) +
+  facet_wrap(vars(topic)) +
   scale_fill_manual(values = party_colors) +
   labs(
-    x = "Parliamentary Group",
-    y = "Percentage of Speeches",
     title = "Speeches per Party and Topic",
     fill = "Party Name"
   ) +
-  theme_minimal() +
+  theme_void() +
   theme(
     legend.position = "bottom",
     legend.text = element_text(size = 9),
-    axis.text.x = element_blank()
+    plot.title = element_text(hjust = 0.5),
+    strip.text = element_text(size = 10, face = "bold")
   ) +
-  guides(fill = guide_legend(nrow = 2))
+  guides(fill = guide_legend(nrow = 3))
 
 ggsave(here("Outputs/13_plot_topic_party_distribution.png"))
-write_rds(p, here("Outputs/13_plot_topic_party_distribution.rds"))
+write_rds(plot, here("Outputs/13_plot_topic_party_distribution.rds"))
 
 # show the plot
-p
+plot
 ```
 
-Let's answer the question how for each party the climate-related speeches are distributed across topics.
+# Visualize Single Topics
 
 ```{r}
-# Get all unique topics and sort them alphabetically
-topic_order <- paragraphs_topics_wide |>
-  pull(topic_name) |>
-  unique() |>
-  sort()
 
-df_plot_party_facet <- paragraphs_topics_wide |>
-  mutate(
-    ParlGroupName = case_when(
-      ParlGroupAbbreviation %in% c("M-E", "BD") ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
-      .default = ParlGroupName
-    ),
-    topic_name = factor(topic_name, levels = topic_order)
-  ) |>
-  group_by(ParlGroupName, topic_name) |>
-  arrange(ParlGroupName, topic_name) |>
+# todo: loop over topics
+
+topic_to_visualize <- 0
+
+df_plot <- paragraphs_topics_wide_filtered |>
+  filter(topic == topic_to_visualize) |> 
+  group_by(ParlGroupName) |>
   summarise(
-    topic_count = n(),
+    group_count = n(),
     .groups = 'drop_last'
   ) |>
   mutate(
-    pct_of_party = topic_count / sum(topic_count)
+    pct_of_topic = group_count / sum(group_count) * 100,
+    ParlGroupName = factor(ParlGroupName, levels = party_names_order)
   ) |>
   drop_na()
 
-p <- ggplot(
-  df_plot_party_facet,
-  aes(x = topic_name, y = pct_of_party, fill = topic_name)
-) +
-  geom_col() +
-  facet_wrap(vars(ParlGroupName)) +
-  labs(
-    x = "Topic",
-    y = "Share (%)",
-    title = "Topic Distribution within Each Party",
-    fill = "Topic"
+plot <- ggplot(
+  df_plot,
+  aes(x = "", y = pct_of_topic, fill = ParlGroupName)
   ) +
-  theme_minimal() +
+  geom_col() +
+  geom_text(aes(
+    label = paste0(round(pct_of_topic, 1), "%")),
+    position = position_stack(vjust = 0.5)
+  ) +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = party_colors) +
+  labs(
+    title = paste("Speech Proportion per Party for Topic", topic_to_visualize),
+    fill = "Party Name"
+  ) +
+  theme_void() +
   theme(
     legend.position = "bottom",
-    legend.text = element_text(size = 8),
-    axis.text.x = element_blank(),
-    axis.ticks.x = element_blank()
+    legend.text = element_text(size = 9),
+    plot.title = element_text(hjust = 0.5)
   ) +
-  guides(fill = guide_legend(nrow = 5))
+  guides(fill = guide_legend(nrow = 3))
 
-ggsave(here("Outputs/13_plot_topic_distribution_by_party.png"), width = 12, height = 8)
-write_rds(p, here("Outputs/13_plot_topic_distribution_by_party.rds"))
+ggsave(here(paste0("Outputs/13_plot_topic_", topic_to_visualize, ".png")))
+write_rds(p, here(paste0("Outputs/13_plot_topic_", topic_to_visualize, ".rds")))
 
 # show the plot
-p
+plot
 ```
