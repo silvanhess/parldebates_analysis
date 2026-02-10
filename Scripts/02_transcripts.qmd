@@ -1,0 +1,348 @@
+---
+title: "Transcripts"
+format: html
+execute:
+  warning: false
+---
+
+# Setup
+
+Import all necessary packages and functions.
+
+```{r}
+library(tidyverse)
+library(swissparl)
+library(furrr)
+library(future)
+library(tidytext)
+library(here)
+
+# source plot functions
+source(here("Scripts/00_functions.R"))
+
+# set up parallel processing with background R sessions
+# adjust number of workers as needed
+# default: 6 for subject_business and 4 for transcripts
+plan(multisession, workers = 4)
+```
+
+# Import Data
+
+```{r}
+businesses_cleaned <- read_rds(here("Data/businesses_cleaned.rds"))
+```
+
+# Download Subjects
+
+```{r}
+get_subjects <- function(bsn, retries = 5, wait = 3) {
+  folder <- here("Data/subjects")
+  if (!dir.exists(folder)) {
+    dir.create(folder)
+  }
+
+  out_file <- file.path(folder, paste0(bsn, ".rds"))
+  if (file.exists(out_file)) {
+    return(NULL)
+  } # skip existing files
+
+  for (attempt in 1:retries) {
+    result <- try(
+      get_data(
+        table = "SubjectBusiness",
+        BusinessShortNumber = bsn,
+        Language = "DE"
+      ),
+      silent = TRUE
+    )
+
+    if (!inherits(result, "try-error")) {
+      write_rds(result, out_file)
+      # message("Downloaded ", bsn, " (attempt ", attempt, ")")
+      return(TRUE)
+    }
+
+    # message("Error on ", bsn, " (attempt ", attempt, "): ", result)
+    Sys.sleep(wait * attempt) # exponential backoff
+  }
+
+  # message("FAILED permanently: ", bsn)
+  write(bsn, file = "failed_ids.txt", append = TRUE)
+  return(FALSE)
+}
+
+# Start parallel jobs
+# fut <- future_walk(
+#   businesses_cleaned$BusinessShortNumber,
+#   get_subjects,
+#   .progress = TRUE
+# )
+
+# WAIT UNTIL ALL JOBS ARE FINISHED
+# value(fut)
+
+subjects <- map_dfr(
+  list.files(here("Data/subjects"), full.names = TRUE),
+  read_rds
+)
+write_rds(subjects, here("Data/subjects.rds"))
+
+# businesses_cleaned |> distinct(BusinessShortNumber)
+# subjects |> distinct(BusinessShortNumber)
+# # some businesses have no entries in SubjectBusiness
+# # this is because some businesses have no discussion in the councils
+
+# # show be which businesses are missing
+# missing_bsn <- setdiff(
+#   businesses_cleaned$BusinessShortNumber,
+#   subjects$BusinessShortNumber
+# )
+# paste(length(missing_bsn), "businesses have no entries in SubjectBusiness.")
+
+# # check whether businesses really have no entries in SubjectBusiness
+# get_data(
+#   table = "SubjectBusiness",
+#   BusinessShortNumber = missing_bsn$BusinessShortNumber[1],
+#   Language = "DE"
+# )
+
+# businesses_lost <- businesses_cleaned |> filter(BusinessShortNumber %in% missing_bsn)
+# businesses_lost |> count(BusinessType, BusinessTypeName)
+
+# # analyze businesses
+# business_names <- subjects |> distinct(BusinessShortNumber, Title)
+```
+
+# Download Transcripts
+
+```{r}
+get_transcripts <- function(sbj, retries = 5, wait = 3) {
+  folder <- here("Data/transcripts")
+  if (!dir.exists(folder)) {
+    dir.create(folder)
+  }
+
+  out_file <- file.path(folder, paste0(sbj, ".rds"))
+  if (file.exists(out_file)) {
+    return(NULL)
+  } # skip existing files
+
+  for (attempt in 1:retries) {
+    result <- try(
+      get_data(
+        table = "Transcript",
+        IdSubject = as.double(sbj),
+        Language = "DE"
+      ),
+      silent = TRUE
+    )
+
+    if (!inherits(result, "try-error")) {
+      saveRDS(result, out_file)
+      # message("Downloaded ", sbj, " (attempt ", attempt, ")")
+      return(TRUE)
+    }
+
+    # message("Error on ", sbj, " (attempt ", attempt, "): ", result)
+    Sys.sleep(wait * attempt) # exponential backoff
+  }
+
+  # message("FAILED permanently: ", sbj)
+  write(sbj, file = "failed_ids.txt", append = TRUE)
+  return(FALSE)
+}
+
+# fut <- future_walk(
+#   subjects$IdSubject,
+#   get_transcripts,
+#   .progress = TRUE
+# )
+
+# value(fut)
+
+transcripts <- map_dfr(
+  list.files(here("Data/transcripts"), full.names = TRUE),
+  read_rds
+)
+write_rds(transcripts, here("Data/transcripts.rds"))
+
+# # check if all transcripts are there
+# subjects |> distinct(IdSubject)
+# transcripts |> distinct(IdSubject)
+```
+
+# Clean Transcripts
+
+```{r}
+# sessions <- get_data(
+#   "Session",
+#   StartDate = c(">2015-01-01"),
+#   Language = "DE"
+# )
+
+# # Gibt es Vorbesprechungen in Kommissionen?
+# transcripts |> count(CouncilId, CouncilName) # beziehen sich auf den Sprecher
+# transcripts |> count(MeetingCouncilAbbreviation)
+# # alle Meetings sind entweder Nationalrat, Ständerat oder Vereinigte Bundesversammlung
+
+# # check languages
+# transcripts |> count(LanguageOfText) |> arrange(n)
+# transcripts |> filter(is.na(LanguageOfText)) |> pull(Text) |> sample(10)
+# transcripts |> filter(!is.na(LanguageOfText)) |> pull(Text) |> sample(10)
+# # italienische Texte müssen sicher raus
+# # aus den Samples ist nicht erkennbar, warum es NAs gibt
+
+# # check speaker functions
+# transcripts |> count(SpeakerFunction) |> arrange(n)
+# transcripts |> filter(is.na(SpeakerFunction)) |> pull(Text) |> sample(10)
+# # wo kein Parlamentarier zugewiesen machen kann, ist es meist eine Moderation
+# # oder ein technischer Hinweis -> kann raus
+# transcripts |> filter(SpeakerFunction == "P-M") |> pull(Text) |> sample(10)
+# # bei P, VP, etc. bin ich mir nicht sicher ob relevant -> erstmal behalten
+
+# # check Votes
+# transcripts |> filter(!is.na(VoteBusinessNumber)) |> pull(Text) |> sample(10) # kann raus
+
+# # check VS tags
+# vorsitzender <- transcripts |>
+#   filter(
+#     str_detect(Text, "\\[VS]")
+#   )
+# # diese Transkript sind für die Analyse des Inhalts nicht von Interesse
+# # diese werden daher aus dem Datensatz entfernt
+
+# italienisch <- transcripts |>
+#   filter(LanguageOfText == "IT")
+# keine italienischen Texte, da nur ca. 1% der Texte
+
+transcripts_filtered <- transcripts |>
+  filter(
+    IdSession >= 5002, # Frühjahrssession 2016
+    IdSession <= 5210, # Herbstsession 2025
+    LanguageOfText != "IT", # keine italienischen Texte
+    is.na(VoteBusinessNumber), # keine Abstimmungen
+    !is.na(SpeakerFunction), # keine Moderationen oder technische Hinweise
+    !str_detect(Text, "\\[VS]") # remove paragraphs with VS (Vorsitzender) tags
+  )
+
+businesses_climate <- businesses_cleaned |>
+  filter(business_tag_climate == TRUE) |>
+  distinct(BusinessShortNumber) |>
+  pull(BusinessShortNumber)
+
+subjects_climate <- subjects |>
+  filter(BusinessShortNumber %in% businesses_climate) |>
+  distinct(IdSubject) |>
+  pull(IdSubject)
+
+transcripts_cleaned <- transcripts_filtered |>
+  rename(transcript_id = ID) |>
+  mutate(
+    transcript_text = Text |>
+      str_replace_all("\\[PAGE \\d+\\]", "") |> # remove pagination
+      str_replace_all("<[^>]+>", "") |> # remove HTML tags for italics and bold etc.
+      str_replace_all("\\[GZ]", "") |> # remove [GZ] tags (Grosse Zäsur)
+      str_squish(),
+    transcript_word_count = str_count(transcript_text),
+    business_tag_climate = if_else(
+      IdSubject %in% subjects_climate,
+      TRUE,
+      FALSE
+    ),
+    meeting_id = as.character(MeetingVerbalixOid),
+    council_id = as.character(CouncilId),
+    canton_id = as.character(CantonId)
+  ) |>
+  select(
+    !c(
+      VoteId,
+      VoteBusinessNumber,
+      VoteBusinessShortNumber,
+      VoteBusinessTitle,
+      Type,
+      SortOrder
+    )
+  )
+
+# session_statistics <- transcripts_filtered |>
+#   group_by(IdSession) |>
+#   summarise(
+#     number_of_meetings = n_distinct(MeetingVerbalixOid),
+#     number_of_protocols = n_distinct(ID),
+#     number_of_businesses = n_distinct(IdSubject)
+#   )
+
+# meeting_statistics <- transcripts_filtered |>
+#   group_by(MeetingVerbalixOid) |>
+#   summarise(
+#     number_of_protocols = n_distinct(ID),
+#     number_of_businesses = n_distinct(IdSubject)
+#   )
+
+# saveRDS(transcripts_filtered, "Data/transcripts_filtered.rds")
+```
+
+# Create Paragraphs
+
+```{r}
+paragraphs_raw <- transcripts_cleaned |>
+  mutate(
+    paragraph_text = str_extract_all(transcript_text, "(?<=<p>)(.*?)(?=</p>)")
+  ) |>
+  unnest(paragraph_text)
+
+# short_paragraphs <- transcripts_tokenized |>
+#   filter(nchar(paragraph) < 50)
+
+# italics <- transcripts_tokenized |>
+#   filter(str_detect(paragraph, "<i>")) # remove the italics tags
+
+# VS_tags <- transcripts_tokenized |>
+#   filter(str_detect(paragraph, "\\[VS]")) # remove those parapgraphs
+
+# GZ_tags <- transcripts_tokenized |>
+#   filter(str_detect(paragraph, "\\[GZ]")) # handelt sich um eine Zäsur (langer Unterbruch) -> tags entfernen
+
+paragraphs_cleaned <- paragraphs_raw |>
+  group_by(transcript_id) |>
+  mutate(
+    paragraph_id = paste0(transcript_id, "-", row_number())
+  ) |>
+  ungroup() |>
+  mutate(
+    paragraph_word_count = str_count(paragraph_text, "\\S+")
+  )
+
+write_rds(paragraphs_cleaned, here("Data/paragraphs_cleaned.rds"))
+```
+
+# Visualize
+
+```{r}
+# transcripts_cleaned |> pull(paragraph) |> sample(10)
+
+# plot paragraph length distribution
+plot_word_count_distribution(
+  data = paragraphs_cleaned,
+  title = "Distribution of Paragraph Lengths in Complete Dataset",
+  output_path = "Outputs/paragraphs_cleaned_text_length_distribution.png"
+)
+
+# plot language distribution
+plot_categorical_distribution(
+  data = paragraphs_cleaned,
+  group_col = "LanguageOfText",
+  x_label = "Language of Paragraphs",
+  title = "Distribution of Languages in Complete Dataset",
+  output_path = "Outputs/paragraphs_cleaned_language_distribution.png"
+)
+
+# plot business tag distribution
+plot_categorical_distribution(
+  data = paragraphs_cleaned,
+  group_col = "business_tag_climate",
+  x_label = "Energy, Transport or Environment Related Business",
+  title = "Distribution of Business Tags in Complete Dataset",
+  output_path = "Outputs/paragraphs_cleaned_business_tags_distribution.png"
+)
+```

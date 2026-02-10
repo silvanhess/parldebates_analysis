@@ -38,7 +38,7 @@ deepl_translate <- function(
 # Histogram for Word Count Distribution
 plot_word_count_distribution <- function(
   data,
-  word_count_col = "WordCount",
+  word_count_col = "paragraph_word_count",
   max_limit = 300,
   # vline_position = 256,
   # vline_label = "Max Tokens",
