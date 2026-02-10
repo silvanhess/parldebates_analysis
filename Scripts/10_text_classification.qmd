@@ -68,10 +68,10 @@ Pre-process the data.
 ```{r}
 #| label: data cleaning
 paragraphs_words <- paragraphs_cleaned |>
-  select(paragraph_id, paragraph) |>
+  select(paragraph_id, paragraph_text) |>
   unnest_tokens(
     output = "word",
-    input = "paragraph",
+    input = "paragraph_text",
     token = "words",
     drop = FALSE
   )
@@ -112,7 +112,7 @@ Apply the Dictionary to the Data and count the number of matches.
 
 paragraphs_classified <- paragraphs_words_cleaned |>
   left_join(dictionary_all_cleaned, by = join_by(word == keyword_original)) |>
-  group_by(paragraph_id, paragraph) |>
+  group_by(paragraph_id, paragraph_text) |>
   summarise(
     keywords_found = paste(na.omit(unique(keyword_english)), collapse = ", "),
     n_keywords_found = sum(!is.na(keyword_english)),
@@ -162,7 +162,7 @@ paragraphs_classified_wide <- paragraphs_subjects_businesses |>
       .default = FALSE
     )
   ) |>
-  rename(paragraph = paragraph.x)
+  rename(paragraph_text = paragraph_text.x)
 ```
 
 Third define businesses that have at least 10% of the paragraphs that match the dictionary as final_climate.
@@ -190,7 +190,31 @@ Important: The climate related debates are therefore based on the nature of the 
 
 # Visualize
 
+## Visualization Setup
+
+```{r}
+party_names_order <- c(
+  "Sozialdemokratische Fraktion",
+  "Grüne Fraktion", 
+  "Die Mitte-Fraktion / CVP-& BD-Fraktion",
+  "Grünliberale Fraktion",
+  "FDP-Liberale Fraktion",
+  "Fraktion der Schweizerischen Volkspartei"
+)
+
+party_colors <- c(
+  "Sozialdemokratische Fraktion" = "#E4032E",
+  "Grüne Fraktion" = "#84B547",
+  "Die Mitte-Fraktion / CVP-& BD-Fraktion" = "#FF8C00",
+  "Grünliberale Fraktion" = "#650959ff",
+  "FDP-Liberale Fraktion" = "#0571C1",
+  "Fraktion der Schweizerischen Volkspartei" = "#00843D"
+)
+```
+
 Let's visualize the data. First show many paragraphs are climate relevant vs. non-relevant.
+
+## Across Categories
 
 ```{r}
 p <- plot_categorical_distribution(
@@ -226,6 +250,29 @@ write_rds(p, here("Outputs/10_paragraphs_climate_distribution.rds"))
 # show the plot
 p
 ```
+
+## Categories Across Parties
+
+```{r}
+share <- paragraphs_classified_wide_final |> 
+  mutate(
+    ParlGroupName = case_when(
+      ParlGroupAbbreviation == "M-E|BD" ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
+      .default = ParlGroupName
+    )
+  ) |> 
+  group_by(ParlGroupName, final_climate) |> 
+  summarise(
+    party_climate_share = sum(paragraph_word_count),
+    .groups = "drop") |> 
+  group_by(meeting_date, ParlGroupName) |> 
+  mutate(
+    ParlGroupName = factor(ParlGroupName, levels = party_names_order)) |>
+  arrange(ParlGroupName, final_climate) |>
+  drop_na(ParlGroupName)
+```
+
+## Categories Over Time
 
 In absolute terms, the number of climate relevant paragraphs in comparison to non-climate paragraphs developed like this.
 
@@ -280,26 +327,11 @@ write_rds(p, here("Outputs/10_plot_timeseries_relative.rds"))
 p
 ```
 
+## Climate Across Parties Over Time
+
 Let's see which parties have been most active in climate debates over time.
 
 ```{r}
-party_names_order <- c(
-  "Sozialdemokratische Fraktion",
-  "Grüne Fraktion", 
-  "Die Mitte-Fraktion / CVP-Fraktion",
-  "Grünliberale Fraktion",
-  "FDP-Liberale Fraktion",
-  "Fraktion der Schweizerischen Volkspartei"
-)
-party_colors <- c(
-  "Sozialdemokratische Fraktion" = "#E4032E",
-  "Grüne Fraktion" = "#84B547",
-  "Die Mitte-Fraktion / CVP-& BD-Fraktion" = "#FF8C00",
-  "Grünliberale Fraktion" = "#650959ff",
-  "FDP-Liberale Fraktion" = "#0571C1",
-  "Fraktion der Schweizerischen Volkspartei" = "#00843D"
-)
-
 share <- paragraphs_classified_wide_final |> 
   filter(final_climate == TRUE) |> 
   mutate(
@@ -349,4 +381,3 @@ There was a time when the mainstream right and populist right parties dominated 
 Interestingly, the proportion of speeches made by the Greens and Green Liberals diverges sharply from 2020 onwards.
 
 The graph does not take into account the size of the parliamentary groups. On average, the mainstream left and mainstream right have a larger share than the Greens and Green Liberals, with the right-wing populist SVP having the largest share in parliament (Source: https://www.parlament.ch/de/organe/fraktionen/).
-
