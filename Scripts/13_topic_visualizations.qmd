@@ -94,7 +94,7 @@ Let's first look what each topic represents.
 topic_representation <- topic_info |> 
   select(topic, OpenAI)
 write_rds(topic_representation, here("Outputs/13_topic_representation.rds"))
-topic_representation %>%
+topic_representation |> 
   kable(
     caption = "Topic Representation based on OpenAI summaries",
     col.names = c("Topic", "Representation")
@@ -106,9 +106,9 @@ topic_representation %>%
 Let's first look at the overall distribution of topics.
 
 ```{r}
-df_topic_distribution <- paragraphs_topics_wide %>%
-  group_by(topic) %>%
-  summarise(n_paragraphs = n()) %>%
+df_topic_distribution <- paragraphs_topics_wide |> 
+  group_by(topic) |> 
+  summarise(n_paragraphs = n()) |> 
   mutate(
     topic = factor(topic, levels = rev(sort(unique(topic)))),
     pct_total = n_paragraphs / sum(n_paragraphs) * 100
@@ -116,8 +116,9 @@ df_topic_distribution <- paragraphs_topics_wide %>%
 
 plot <- ggplot(df_topic_distribution, aes(x = topic, y = pct_total)) +
   geom_col(fill = "steelblue") +
-  geom_text(aes(label = paste0(round(pct_total, 1), "%")), 
-            hjust = -0.2, size = 3) +
+  geom_text(aes(
+    label = paste0(round(pct_total, 1), "%")), 
+    hjust = -0.2, size = 3) +
   coord_flip() +
   labs(
     x = "Topic",
@@ -160,7 +161,7 @@ plot <- ggplot(
   scale_fill_manual(values = party_colors) +
   labs(
     title = "Speeches per Party and Topic",
-    fill = "Party Name"
+    fill = "" # no description for the legend
   ) +
   theme_void() +
   theme(
@@ -184,9 +185,9 @@ plot
 
 # todo: loop over topics
 
-topic_to_visualize <- 0
+topic_to_visualize <- "01"
 
-df_plot <- paragraphs_topics_wide_filtered |>
+df_plot <- paragraphs_topics_wide |>
   filter(topic == topic_to_visualize) |> 
   group_by(ParlGroupName) |>
   summarise(
@@ -212,7 +213,7 @@ plot <- ggplot(
   scale_fill_manual(values = party_colors) +
   labs(
     title = paste("Speech Proportion per Party for Topic", topic_to_visualize),
-    fill = "Party Name"
+    fill = "" # no description for the legend
   ) +
   theme_void() +
   theme(
@@ -223,7 +224,7 @@ plot <- ggplot(
   guides(fill = guide_legend(nrow = 3))
 
 ggsave(here(paste0("Outputs/13_plot_topic_", topic_to_visualize, ".png")))
-write_rds(p, here(paste0("Outputs/13_plot_topic_", topic_to_visualize, ".rds")))
+write_rds(plot, here(paste0("Outputs/13_plot_topic_", topic_to_visualize, ".rds")))
 
 # show the plot
 plot
