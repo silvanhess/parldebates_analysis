@@ -2,8 +2,69 @@
 title: BERTopic Analysis with OpenAI Representation
 jupyter: bertopic_env
 format: html
-  # number-sections: true
 ---
+
+# Data Preprocessing
+
+```{r}
+# libraries --------------------------------------------------------------
+
+library(tidyverse)
+
+# import data ------------------------------------------------------------
+
+# paragraphs_classified_wide <- read_rds("Data/paragraphs_classified_wide.rds")
+paragraphs_climate <- read_rds("Data/paragraphs_climate.rds")
+paragraphs_words_cleaned <- read_rds("Data/paragraphs_words_cleaned.rds")
+
+# include all transcripts that belong to a climate relevant business------
+
+paragraphs_climate_summary <- paragraphs_climate |>
+  distinct(paragraph_id, paragraph) |> 
+  mutate(paragraph_length = str_count(paragraph, "\\S+")) |> 
+  filter(paragraph_length >= 20) # filter very short paragraphs
+
+write_csv(
+  paragraphs_climate_summary,
+  "Data/paragraphs_climate_for_topic_modeling.csv"
+)
+
+transcripts_climate_summary <- paragraphs_climate |>
+  group_by(transcript_id) |>
+  summarise(
+    transcript_text = paste(paragraph, collapse = " "),
+    transcript_word_length = str_count(transcript_text, "\\S+"),
+    .groups = "drop"
+  ) |> 
+  filter(transcript_word_length >= 50) # filter very short transcripts
+
+# # without stopwords
+# transcripts_climate <- paragraphs_climate |>
+#   # filter(climate_business == TRUE) |>
+#   distinct(transcript_id, paragraph_id, paragraph) |>
+#   # left_join(
+#   #   paragraphs_words_cleaned,
+#   #   by = join_by(paragraph_id),
+#   #   relationship = "many-to-many"
+#   # ) |>
+#   # select(-paragraph) |>
+#   group_by(transcript_id) |>
+#   summarise(
+#     transcript_text = paste(word, collapse = " "),
+#     transcript_word_length = str_count(transcript_text, "\\S+"),
+#     .groups = "drop"
+#   )
+
+# # print random transcript text
+# transcripts_climate |>
+#   slice_sample(n = 10) |>
+#   pull(transcript_text)
+
+write_csv(
+  transcripts_climate_summary,
+  "Data/transcripts_climate_for_topic_modeling.csv"
+)
+```
 
 This notebook performs topic modeling on climate-related transcripts using BERTopic with multiple representation models including OpenAI's GPT-4o-mini for generating human-readable topic labels.
 
@@ -384,3 +445,228 @@ This notebook performed topic modeling on climate transcripts using: - Multiling
 The OpenAI integration provides human-readable English labels that summarize each topic based on keywords and representative documents.
 
 **Next steps:** - Examine the visualizations in the Outputs folder - Review topic_info.csv to see all topic representations - Analyze documents_with_topics.csv to understand topic assignments - Consider adjusting `min_cluster_size` or other parameters if topics are too broad or too granular
+
+# Setup
+
+Import all necessary packages and functions.
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(here)
+library(knitr)
+```
+
+# Data Import
+
+Read in all presaved data.
+
+```{r}
+#| label: data import
+
+# todo: data sources mit der neuen version ersetzen (12_filename.csv)
+
+documents_with_topics <- read_csv(here("Data/documents_with_topics.csv")) |>
+  mutate(
+    transcript_id = as.character(transcript_id),
+    topic = sprintf("%02d", as.numeric(topic))
+  ) |> 
+  filter(topic != -1)
+
+topic_info <- read_csv(here("Data/topic_info.csv")) |>
+  rename(topic = Topic, topic_name = Name) |>
+  mutate(topic = sprintf("%02d", as.numeric(topic))
+  ) |> 
+  filter(topic != -1)
+
+paragraphs_climate <- read_rds(here("Data/paragraphs_classified_wide_final.rds")) |> 
+    filter(final_climate == TRUE) |> 
+    mutate(
+    ParlGroupName = case_when(
+      ParlGroupAbbreviation %in% c("M-E", "BD") ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
+      .default = ParlGroupName
+    )
+  )
+```
+
+# Data Preparation
+
+```{r}
+documents_with_topics_wide <- documents_with_topics |>
+  left_join(topic_info, by = join_by(topic))
+
+paragraphs_topics_wide <- documents_with_topics_wide |>
+  inner_join(
+    paragraphs_climate,
+    by = join_by(transcript_id),
+    relationship = "one-to-many" # has multiple paragraphs per transcript
+  ) |>
+  drop_na(ParlGroupAbbreviation)
+```
+
+# Visualization Setup
+
+```{r}
+party_names_order <- c(
+  "Sozialdemokratische Fraktion",
+  "Grüne Fraktion", 
+  "Die Mitte-Fraktion / CVP-& BD-Fraktion",
+  "Grünliberale Fraktion",
+  "FDP-Liberale Fraktion",
+  "Fraktion der Schweizerischen Volkspartei"
+)
+
+party_colors <- c(
+  "Sozialdemokratische Fraktion" = "#E4032E",
+  "Grüne Fraktion" = "#84B547",
+  "Die Mitte-Fraktion / CVP-& BD-Fraktion" = "#FF8C00",
+  "Grünliberale Fraktion" = "#650959ff",
+  "FDP-Liberale Fraktion" = "#0571C1",
+  "Fraktion der Schweizerischen Volkspartei" = "#00843D"
+)
+```
+
+# Visualize Topic Representation
+
+Let's first look what each topic represents.
+
+```{r}
+topic_representation <- topic_info |> 
+  select(topic, OpenAI)
+write_rds(topic_representation, here("Outputs/13_topic_representation.rds"))
+topic_representation |> 
+  kable(
+    caption = "Topic Representation based on OpenAI summaries",
+    col.names = c("Topic", "Representation")
+  )
+```
+
+# Visualize Topic Distribution
+
+Let's first look at the overall distribution of topics.
+
+```{r}
+df_topic_distribution <- paragraphs_topics_wide |> 
+  group_by(topic) |> 
+  summarise(n_paragraphs = n()) |> 
+  mutate(
+    topic = factor(topic, levels = rev(sort(unique(topic)))),
+    pct_total = n_paragraphs / sum(n_paragraphs) * 100
+  )
+
+plot <- ggplot(df_topic_distribution, aes(x = topic, y = pct_total)) +
+  geom_col(fill = "steelblue") +
+  geom_text(aes(
+    label = paste0(round(pct_total, 1), "%")), 
+    hjust = -0.2, size = 3) +
+  coord_flip() +
+  labs(
+    x = "Topic",
+    y = "Percentage of Total Paragraphs",
+    title = "Distribution of Paragraphs across Topics"
+  ) +
+  theme_minimal()
+
+ggsave(here("Outputs/13_plot_topic_distribution.png"))
+write_rds(plot, here("Outputs/13_plot_topic_distribution.rds"))
+
+# show the plot
+plot
+```
+
+# Visualize All Topics per Party
+
+Let's visualize the parties per topic.
+
+```{r}
+df_plot <- paragraphs_topics_wide |>
+  group_by(topic, ParlGroupName) |>
+  summarise(
+    group_count = n(),
+    .groups = 'drop_last'
+  ) |>
+  mutate(
+    pct_of_topic = group_count / sum(group_count) * 100,
+    ParlGroupName = factor(ParlGroupName, levels = party_names_order)
+  ) |>
+  drop_na()
+
+plot <- ggplot(
+  df_plot,
+  aes(x = "", y = pct_of_topic, fill = ParlGroupName)
+) +
+  geom_col() +
+  coord_polar("y", start = 0) +
+  facet_wrap(vars(topic)) +
+  scale_fill_manual(values = party_colors) +
+  labs(
+    title = "Speeches per Party and Topic",
+    fill = "" # no description for the legend
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 9),
+    plot.title = element_text(hjust = 0.5),
+    strip.text = element_text(size = 10, face = "bold")
+  ) +
+  guides(fill = guide_legend(nrow = 3))
+
+ggsave(here("Outputs/13_plot_topic_party_distribution.png"))
+write_rds(plot, here("Outputs/13_plot_topic_party_distribution.rds"))
+
+# show the plot
+plot
+```
+
+# Visualize Single Topics
+
+```{r}
+
+# todo: loop over topics
+
+topic_to_visualize <- "01"
+
+df_plot <- paragraphs_topics_wide |>
+  filter(topic == topic_to_visualize) |> 
+  group_by(ParlGroupName) |>
+  summarise(
+    group_count = n(),
+    .groups = 'drop_last'
+  ) |>
+  mutate(
+    pct_of_topic = group_count / sum(group_count) * 100,
+    ParlGroupName = factor(ParlGroupName, levels = party_names_order)
+  ) |>
+  drop_na()
+
+plot <- ggplot(
+  df_plot,
+  aes(x = "", y = pct_of_topic, fill = ParlGroupName)
+  ) +
+  geom_col() +
+  geom_text(aes(
+    label = paste0(round(pct_of_topic, 1), "%")),
+    position = position_stack(vjust = 0.5)
+  ) +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = party_colors) +
+  labs(
+    title = paste("Speech Proportion per Party for Topic", topic_to_visualize),
+    fill = "" # no description for the legend
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 9),
+    plot.title = element_text(hjust = 0.5)
+  ) +
+  guides(fill = guide_legend(nrow = 3))
+
+ggsave(here(paste0("Outputs/13_plot_topic_", topic_to_visualize, ".png")))
+write_rds(plot, here(paste0("Outputs/13_plot_topic_", topic_to_visualize, ".rds")))
+
+# show the plot
+plot
+```

@@ -1,0 +1,265 @@
+---
+title: "Untitled"
+format: html
+---
+
+# Process labeled data
+
+```{r}
+# libraries --------------------------------------------------------------
+
+library(tidyverse)
+source("Scripts/00_functions.R")
+
+# import data ------------------------------------------------------------
+
+labeled_dataset <- read_csv("labeled_dataset.csv")
+handcoding_dataset <- read_rds("Data/handcoding_dataset.rds")
+paragraphs_cleaned <- read_rds("Data/paragraphs_cleaned.rds")
+
+# clean labeled dataset --------------------------------------------------
+
+# since I didn't label all the paragraphs in the handcoding dataset,
+# I need to do some preprocessing to get the final labeled dataset
+
+labeled_dataset_cleaned <-
+  # join paragraphs_cleaned because in the first version i forgot to include the original paragraph
+  inner_join(
+    labeled_dataset,
+    paragraphs_cleaned,
+    by = join_by(paragraph_id)
+  ) |>
+  mutate(
+    sentiment = case_when(
+      sentiment == "non_climate" ~ FALSE,
+      sentiment == "non_classifiable" ~ FALSE,
+      sentiment == "climate" ~ TRUE
+    ),
+    WordCount = str_count(paragraph, "\\S+")
+  ) |>
+  rename(
+    climate = sentiment,
+    LanguageOfText = LanguageOfText.x
+  ) |>
+  select(
+    !c(
+      annotation_id,
+      annotator,
+      created_at,
+      id,
+      lead_time,
+      updated_at
+    )
+  )
+
+write_rds(labeled_dataset_cleaned, "Data/labeled_dataset_cleaned.rds")
+
+# # save training dataset for BERT Fine-Tuning
+# training_data <- labeled_dataset_cleaned |>
+# rename(
+#     original_text = paragraph,
+#     language = LanguageOfText
+#   ) |>
+#   select(paragraph_id, original_text, final_climate, language)
+
+# write_csv(training_data, "BERT_Finetuning/training_data.csv")
+
+# transcripts_cleaned <- readRDS("Data/transcripts_cleaned.rds")
+# transcripts_classified <- left_join(transcripts_cleaned, training_dataset, by = join_by(paragraph))
+
+# plot data ------------------------------------------------------------------
+
+# plot distribution of text lengths
+plot_word_count_distribution(
+  data = labeled_dataset_cleaned,
+  title = "Distribution of Paragraph Lengths in Labeled Paragraphs",
+  output_path = "Outputs/labeled_paragraphs_text_length_distribution.png"
+)
+
+# plot distribution of languages
+plot_categorical_distribution(
+  data = labeled_dataset_cleaned,
+  group_col = "LanguageOfText",
+  title = "Distribution of Languages in Labeled Paragraphs",
+  x_label = "Language of Paragraphs",
+  output_path = "Outputs/labeled_paragraphs_language_distribution.png"
+)
+
+# plot business tag distribution
+plot_categorical_distribution(
+  data = labeled_dataset_cleaned,
+  group_col = "business_tag_climate",
+  x_label = "Energy, Transport or Environment Related Business",
+  title = "Distribution of Business Tags in Labeled Paragraphs",
+  output_path = "Outputs/labeled_paragraphs_business_tags_distribution.png"
+)
+
+# plot distribution of final climate labels
+plot_categorical_distribution(
+  data = labeled_dataset_cleaned,
+  group_col = "climate",
+  x_label = "Class",
+  title = "Distribution of Climate Related Paragraphs in Labeled Paragraphs",
+  output_path = "Outputs/labeled_paragraphs_class_distribution.png"
+)
+```
+
+# Keyword extraction
+
+```{r}
+# Load necessary libraries
+library(tidyverse)
+library(dotenv)
+library(ellmer)
+library(furrr)
+library(future)
+
+# Step 1: Load the dataset
+df <- read_rds("Data/labeled_dataset_cleaned.rds") |>
+  filter(climate == TRUE)
+
+# Initialize keywords column
+df$keywords <- NA_character_
+
+# Step 2: Load API-Key from .env
+load_dot_env()
+
+# Step 3: Prepare the prompt
+prompt <- paste(readLines("extraction_prompt.txt"), collapse = " ")
+
+# Set up parallel processing
+# Adjust workers based on your API rate limits and system capacity
+plan(multisession, workers = 4)
+
+# Function to process a single text entry
+process_text <- function(text, index) {
+  # Initialize chat inside the function for parallel processing
+  chat <- chat_openai(
+    model = "gpt-5-mini",
+    system_prompt = prompt
+  )
+
+  # Skip if empty
+  if (is.na(text) || text == "") {
+    message("Skipping empty row ", index)
+    return(NA_character_)
+  }
+
+  # Get the response from the chat model
+  result <- tryCatch(
+    {
+      response <- chat$chat(text)
+      # if (!is.null(response)) {
+      #   message("Successfully processed row ", index)
+      #   response
+      # } else {
+      #   message("No response for row ", index)
+      #   NA_character_
+      # }
+    },
+    error = function(e) {
+      message("Error processing row ", index, ": ", e$message)
+      NA_character_
+    }
+  )
+
+  return(result)
+}
+
+# Process all rows
+rows_to_process <- seq_len(nrow(df))
+
+cat("Total rows to process:", length(rows_to_process), "\n")
+cat("Using parallel processing with", future::nbrOfWorkers(), "workers\n")
+
+# Process texts in parallel and store results
+df$keywords <- future_map2_chr(
+  df$original_text,
+  rows_to_process,
+  process_text,
+  .progress = TRUE,
+  .options = furrr_options(seed = TRUE)
+)
+
+# Close parallel workers
+plan(sequential)
+
+# Save the updated dataframe
+write_rds(df, "Data/keywords_extracted.rds")
+```
+
+# Dictionary preparation
+
+```{r}
+# libraries --------------------------------------------------------------
+
+library(tidyverse)
+library(dotenv)
+library(openxlsx)
+source("Scripts/00_functions.R")
+
+# import data -------------------------------------------------------------
+
+keywords_extracted <- read_rds("Data/keywords_extracted.rds")
+
+# prepare german dictionary -----------------------------------------------
+
+german_keywords <- keywords_extracted |>
+  filter(language == "DE") |>
+  pull(keywords) |>
+  str_split(",") |>
+  unlist() |>
+  str_squish() |>
+  sort() |>
+  unique() |>
+  discard(~ .x == "")
+
+# prepare french dictionary -----------------------------------------------
+
+french_keywords <- keywords_extracted |>
+  filter(language == "FR") |>
+  pull(keywords) |>
+  str_split(",") |>
+  unlist() |>
+  str_squish() |>
+  sort() |>
+  unique() |>
+  discard(~ .x == "")
+
+# translate to english ---------------------------------------------------
+
+# prepare dataframe
+german_dictionary <- tibble(
+  keyword_german = german_keywords,
+  keyword_english = NA
+)
+
+french_dictionary <- tibble(
+  keyword_french = french_keywords,
+  keyword_english = NA
+)
+
+# Load Deepl Credentials
+load_dot_env()
+
+german_dictionary$keyword_english <- map_chr(
+  german_dictionary$keyword_german,
+  deepl_translate,
+  .progress = TRUE
+)
+
+french_dictionary$keyword_english <- map_chr(
+  french_dictionary$keyword_french,
+  deepl_translate,
+  .progress = TRUE
+)
+
+# export ------------------------------------------------------------------
+
+# export as excel
+write.xlsx(german_dictionary, "Data/german_dictionary.xlsx")
+write.xlsx(french_dictionary, "Data/french_dictionary.xlsx")
+
+# by hand, check the keywords and clean the dictionaries
+# after cleaning, save them as *_curated.xlsx
+```

@@ -192,6 +192,8 @@ write_rds(transcripts, here("Data/transcripts.rds"))
 # # italienische Texte müssen sicher raus
 # # aus den Samples ist nicht erkennbar, warum es NAs gibt
 
+# todo: plot language distribution
+
 # # check speaker functions
 # transcripts |> count(SpeakerFunction) |> arrange(n)
 # transcripts |> filter(is.na(SpeakerFunction)) |> pull(Text) |> sample(10)
