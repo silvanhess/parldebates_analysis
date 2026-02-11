@@ -462,3 +462,25 @@ Until around 2021, the mainstream and populist right dominated climate debates. 
 The graph does not account for the relative size of parliamentary groups. The mainstream left and right tend to have larger shares than the Greens and Green Liberals, with the SVP holding the largest share in parliament overall (see [parlament.ch](https://www.parlament.ch/de/organe/fraktionen/)).
 
 When we look at the relative contribution to the climate debate, we see that the dominating factor is the presence of the climate in the parliament. When climate is the topic, every party contributes about the same with more variation happening towards the end of the 10-year period. This suggests that the differences in absolute share are largely driven by the overall presence of climate topics in the parliament, rather than by specific parties dominating the climate debate when it occurs.
+
+# Prepare Data for Topic Modeling
+
+Prepare climate-related paragraphs and transcripts for topic modeling. Filter out very short texts to ensure meaningful topic extraction.
+
+```{r}
+transcripts_climate_summary <- 
+  paragraphs_classified_wide_final |>
+  filter(final_climate == TRUE) |> 
+  group_by(transcript_id) |>
+  summarise(
+    transcript_text = paste(paragraph_text, collapse = " "),
+    transcript_word_length = str_count(transcript_text, "\\S+"),
+    .groups = "drop"
+  ) |>
+  filter(transcript_word_length >= 50)
+
+write_csv(
+  transcripts_climate_summary,
+  here("Data/06_transcripts_climate_for_topic_modeling.csv")
+)
+```

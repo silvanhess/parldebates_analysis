@@ -1,36 +1,11 @@
 ---
-title: "Topic Modeling"
+title: Topic Modeling
 jupyter: bertopic_env
 format: html
 execute:
   warning: false
 ---
 
-# R: Data Preprocessing
-
-Prepare climate-related paragraphs and transcripts for topic modeling. Filter out very short texts to ensure meaningful topic extraction.
-
-```{r}
-library(tidyverse)
-library(here)
-
-paragraphs_climate <- read_rds(here("Data/05_paragraphs_classified_wide_final.rds")) |>
-  filter(final_climate == TRUE)
-
-transcripts_climate_summary <- paragraphs_climate |>
-  group_by(transcript_id) |>
-  summarise(
-    transcript_text = paste(paragraph_text, collapse = " "),
-    transcript_word_length = str_count(transcript_text, "\\S+"),
-    .groups = "drop"
-  ) |>
-  filter(transcript_word_length >= 50)
-
-write_csv(
-  transcripts_climate_summary,
-  here("Data/06_transcripts_climate_for_topic_modeling.csv")
-)
-```
 
 # Python: BERTopic Modeling
 
@@ -312,3 +287,4 @@ print("  ✓ Topic barchart saved")
 
 print(f"\nProcessing complete! Check the {output_dir} folder for visualizations.")
 ```
+
