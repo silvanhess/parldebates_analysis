@@ -4,10 +4,10 @@
 .Ruserdata
 .env
 Data/
-Outputs/
 Scripts/arc/
 arc/
 .quarto/
+*.rds
 
 # BERT-Finetuning/arc/
 # BERTopic/arc/
@@ -24,3 +24,5 @@ arc/
 
 
 **/*.quarto_ipynb
+
+/.quarto/
