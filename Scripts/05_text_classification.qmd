@@ -299,32 +299,78 @@ p
 
 ## Climate Share Across Parties
 
-Share of words spoken in climate-related debates per parliamentary group, measured as a percentage of each party's total word count.
+How much does each party contribute to the climate debate?
 
 ```{r}
 share_words <- paragraphs_classified_wide_final |>
-  filter(final_climate == TRUE) 
+  filter(final_climate == TRUE) |> 
+  mutate(ParlGroupName = factor(ParlGroupName, levels = rev(party_names_order))) |> 
   group_by(ParlGroupName) |>
-  summarise(
-    total_words = sum(paragraph_word_count),
-    share = total_words / sum(total_words) * 100,
-    ParlGroupName = factor(ParlGroupName, levels = rev(party_names_order))
+  summarise(wordcount_party = sum(paragraph_word_count)) |>
+  ungroup() |>
+  mutate(
+    total_words = sum(wordcount_party),
+    share = wordcount_party / total_words * 100
   )
 
 p <- share_words |>
-  ggplot(aes(x = share, y = ParlGroupName, fill = ParlGroupName)) +
-  geom_col() +
+  ggplot(aes(x = share, y = "", fill = ParlGroupName)) +
+  geom_col(position = "stack", width = 0.5) +
   scale_fill_manual(values = party_colors) +
   labs(
     title = "Climate Share of Parliamentary Debates per Party",
     x = "Share of Words in Climate Debates (%)",
-    y = NULL
+    y = NULL,
+    fill = "Party"
   ) +
   theme_minimal() +
-  theme(legend.position = "none")
+  theme(
+    legend.position = "right",
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor.y = element_blank()
+  )
 
 ggsave(here("Outputs/05_plot_climate_share_per_party.png"), width = 10, height = 6)
 write_rds(p, here("Outputs/05_plot_climate_share_per_party.rds"))
+p
+```
+
+How much does each party contribute compared to their overall contribution? e.g. the SP speaks overall 20% but in climate debates 30%. this means they have a contribution of 150% (30% / 20%) compared to their overall contribution.
+
+```{r}
+share_words <- paragraphs_classified_wide_final |>
+  mutate(ParlGroupName = factor(ParlGroupName, levels = rev(party_names_order))) |> 
+  group_by(ParlGroupName) |>
+  summarise(
+    wordcount_party = sum(paragraph_word_count),
+    wordcount_climate_party = sum(paragraph_word_count[final_climate == TRUE])
+  ) |>
+  ungroup() |>
+  mutate(
+    total_words = sum(wordcount_party),
+    total_climate_words = sum(wordcount_climate_party),
+    share_overall = wordcount_party / total_words * 100,
+    share_climate = wordcount_climate_party / total_climate_words * 100,
+    contribution = share_climate / share_overall
+  )
+
+p <- share_words |>
+  ggplot(aes(x = contribution, y = ParlGroupName, fill = ParlGroupName)) +
+  geom_col() +
+  scale_fill_manual(values = party_colors) +
+  labs(
+    title = "Contribution to Climate Debate per Party",
+    x = "Climate Factor (Share in Climate Debates / Overall Share)",
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "gray50")
+
+ggsave(here("Outputs/05_plot_climate_factor_per_party.png"), width = 10, height = 6)
+write_rds(p, here("Outputs/05_plot_climate_factor _per_party.rds"))
 p
 ```
 
@@ -334,7 +380,7 @@ Share of climate-related speeches per parliamentary group over time (30-session 
 
 ### Absolute terms
 
-This means disregarding the total word count of each party. Just looking at the share of one party divided by the total word count of climate debates in that session, without accounting for the fact that some parties speak more than others.
+This means disregarding the total word count of each party. Just looking at the share of one party divided by the total word count of the climate debate in that session, without accounting for the fact that some parties speak more than others.
 
 ```{r}
 share <- paragraphs_classified_wide_final |>
@@ -349,7 +395,7 @@ share <- paragraphs_classified_wide_final |>
     ParlGroupName = factor(ParlGroupName, levels = party_names_order)) |>
   arrange(meeting_date, ParlGroupName) |>
   group_by(ParlGroupName) |>
-  mutate(rolling_avg = rollmean(share_party, k = 30, fill = NA)) |>
+  mutate(rolling_avg = rollmean(share_party, k = 30, fill = NA))
 
 p <- ggplot(share, aes(x = meeting_date, y = rolling_avg, color = ParlGroupName)) +
   geom_line(size = 1) +
@@ -414,3 +460,5 @@ p
 Until around 2021, the mainstream and populist right dominated climate debates. After that point the distribution became more balanced across parties, with the Greens taking the largest share. Notably, the trajectories of the Greens and Green Liberals diverge sharply from 2020 onwards.
 
 The graph does not account for the relative size of parliamentary groups. The mainstream left and right tend to have larger shares than the Greens and Green Liberals, with the SVP holding the largest share in parliament overall (see [parlament.ch](https://www.parlament.ch/de/organe/fraktionen/)).
+
+When we look at the relative contribution to the climate debate, we see that the dominating factor is the presence of the climate in the parliament. When climate is the topic, every party contributes about the same with more variation happening towards the end of the 10-year period. This suggests that the differences in absolute share are largely driven by the overall presence of climate topics in the parliament, rather than by specific parties dominating the climate debate when it occurs.
