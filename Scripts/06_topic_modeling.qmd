@@ -1,112 +1,44 @@
 ---
-title: BERTopic Analysis with OpenAI Representation
+title: "Topic Modeling"
 jupyter: bertopic_env
 format: html
+execute:
+  warning: false
 ---
 
-# Data Preprocessing
+# R: Data Preprocessing
+
+Prepare climate-related paragraphs and transcripts for topic modeling. Filter out very short texts to ensure meaningful topic extraction.
 
 ```{r}
-# libraries --------------------------------------------------------------
-
 library(tidyverse)
+library(here)
 
-# import data ------------------------------------------------------------
-
-# paragraphs_classified_wide <- read_rds("Data/paragraphs_classified_wide.rds")
-paragraphs_climate <- read_rds("Data/paragraphs_climate.rds")
-paragraphs_words_cleaned <- read_rds("Data/paragraphs_words_cleaned.rds")
-
-# include all transcripts that belong to a climate relevant business------
-
-paragraphs_climate_summary <- paragraphs_climate |>
-  distinct(paragraph_id, paragraph) |> 
-  mutate(paragraph_length = str_count(paragraph, "\\S+")) |> 
-  filter(paragraph_length >= 20) # filter very short paragraphs
-
-write_csv(
-  paragraphs_climate_summary,
-  "Data/paragraphs_climate_for_topic_modeling.csv"
-)
+paragraphs_climate <- read_rds(here("Data/05_paragraphs_classified_wide_final.rds")) |>
+  filter(final_climate == TRUE)
 
 transcripts_climate_summary <- paragraphs_climate |>
   group_by(transcript_id) |>
   summarise(
-    transcript_text = paste(paragraph, collapse = " "),
+    transcript_text = paste(paragraph_text, collapse = " "),
     transcript_word_length = str_count(transcript_text, "\\S+"),
     .groups = "drop"
-  ) |> 
-  filter(transcript_word_length >= 50) # filter very short transcripts
-
-# # without stopwords
-# transcripts_climate <- paragraphs_climate |>
-#   # filter(climate_business == TRUE) |>
-#   distinct(transcript_id, paragraph_id, paragraph) |>
-#   # left_join(
-#   #   paragraphs_words_cleaned,
-#   #   by = join_by(paragraph_id),
-#   #   relationship = "many-to-many"
-#   # ) |>
-#   # select(-paragraph) |>
-#   group_by(transcript_id) |>
-#   summarise(
-#     transcript_text = paste(word, collapse = " "),
-#     transcript_word_length = str_count(transcript_text, "\\S+"),
-#     .groups = "drop"
-#   )
-
-# # print random transcript text
-# transcripts_climate |>
-#   slice_sample(n = 10) |>
-#   pull(transcript_text)
+  ) |>
+  filter(transcript_word_length >= 50)
 
 write_csv(
   transcripts_climate_summary,
-  "Data/transcripts_climate_for_topic_modeling.csv"
+  here("Data/06_transcripts_climate_for_topic_modeling.csv")
 )
 ```
 
-This notebook performs topic modeling on climate-related transcripts using BERTopic with multiple representation models including OpenAI's GPT-4o-mini for generating human-readable topic labels.
+# Python: BERTopic Modeling
 
-todo: format markdown text (e.g. fix the lists and remove numbering)
+This section performs topic modeling on climate-related transcripts using BERTopic with multilingual embeddings and multiple representation models.
 
-## Overview
+## Setup
 
-The pipeline consists of the following steps:
-
-1.  Load and prepare documents
-
-2.  Generate or load document embeddings
-
-3.  Reduce embeddings for visualization
-
-4.  Configure clustering and vectorization
-
-5.  Set up topic representation models
-
-6.  Fit BERTopic model and extract topics
-
-7.  Visualize and save results
-
-## 1. Import Required Libraries
-
-We import all necessary libraries for:
-
-\- **Data manipulation**: pandas
-
-\- **Topic modeling**: BERTopic and its components
-
-\- **Embeddings**: SentenceTransformer for multilingual embeddings
-
-\- **Dimensionality reduction**: UMAP
-
-\- **Clustering**: HDBSCAN
-
-\- **Text vectorization**: CountVectorizer
-
-\- **Topic representation**: KeyBERT, MMR, and OpenAI
-
-\- **Utilities**: NLTK for stopwords, pickle for caching, dotenv for API keys
+Import all necessary Python libraries for topic modeling.
 
 ```{python}
 import pandas as pd
@@ -124,40 +56,28 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI as OpenAIClient
 
-# Load environment variables from .env file
 load_dotenv()
 ```
 
-## 2. Configure Project Paths
-
-Set up the project root directory path. This ensures all file paths work correctly regardless of where the notebook is located.
-
-**Options:**
-
--   If your notebook is in the project root, use `Path.cwd()`
-
--   If your notebook is in a subdirectory (e.g., `notebooks/`), use `Path.cwd().parent`
-
--   Or manually specify the absolute path to your project folder
+Configure project paths. Adjust based on notebook location.
 
 ```{python}
-# Configure project root path
-# Option 1: Notebook is in project root
+# Option 1: Notebook in project root
+# use for local development in VSCode or JupyterLab
 # project_root = Path.cwd()
 
-# Option 2: Notebook is in a subdirectory (e.g., notebooks/)
+# Option 2: Notebook in subdirectory (e.g., notebooks/)
+# use for rendering with Quarto
 project_root = Path.cwd().parent
 
-# Option 3: Manually specify absolute path
+# Option 3: Manually specify path
 # project_root = Path('/path/to/your/project')
 
 print(f"Project root: {project_root}")
 
-# Define data and output directories
 data_dir = project_root / 'Data'
 output_dir = project_root / 'Outputs'
 
-# Create directories if they don't exist
 data_dir.mkdir(parents=True, exist_ok=True)
 output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -165,12 +85,12 @@ print(f"Data directory: {data_dir}")
 print(f"Output directory: {output_dir}")
 ```
 
-## 3. Load Documents
+## Load Documents
 
-Read the preprocessed CSV file containing climate-related transcripts. Each row represents a document that will be analyzed for topic modeling.
+Read the preprocessed transcripts.
 
 ```{python}
-df = pd.read_csv(data_dir / 'transcripts_climate_for_topic_modeling.csv')
+df = pd.read_csv(data_dir / '06_transcripts_climate_for_topic_modeling.csv')
 text_column = 'transcript_text'
 documents = df[text_column].tolist()
 
@@ -178,17 +98,15 @@ print(f"Loaded {len(documents)} documents")
 print(f"First document preview: {documents[0][:200]}...")
 ```
 
-## 4. Generate or Load Document Embeddings
+## Generate Embeddings
 
-Embeddings are dense vector representations of documents that capture their semantic meaning. We use the **paraphrase-multilingual-mpnet-base-v2** model which works well for German and French texts.
-
-To save computation time, we cache embeddings to disk. If they exist, we load them; otherwise, we compute and save them.
+Create dense vector representations using a multilingual sentence transformer. Cache embeddings to disk for faster re-runs.
 
 ```{python}
 print("Calculating or loading embeddings...")
 embedding_model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
 
-emb_path = data_dir / 'embeddings.pickle'
+emb_path = data_dir / '06_embeddings.pickle'
 if emb_path.exists():
     print("Loading existing embeddings from disk...")
     with emb_path.open('rb') as handle:
@@ -204,32 +122,29 @@ else:
 print(f"Embeddings shape: {embeddings.shape}")
 ```
 
-## 5. Pre-reduce Embeddings for Visualization (2D)
+## Reduce Embeddings (2D)
 
-We use **UMAP** (Uniform Manifold Approximation and Projection) to reduce the high-dimensional embeddings to 2D for visualization purposes. This allows us to plot documents in a 2D space where similar documents are close together.
-
-**Parameters:** - `n_neighbors=15`: Controls local vs. global structure (higher = more global) - `n_components=2`: Target dimensionality (2D for visualization) - `min_dist=0.0`: Minimum distance between points in low-dimensional space - `metric='cosine'`: Distance metric suitable for text embeddings - `random_state=42`: For reproducibility
+Reduce embeddings to 2D for visualization using UMAP.
 
 ```{python}
 print("Reducing embeddings for visualization...")
 reduced_embeddings = UMAP(
-    n_neighbors=15, 
-    n_components=2, 
-    min_dist=0.0, 
-    metric='cosine', 
+    n_neighbors=15,
+    n_components=2,
+    min_dist=0.0,
+    metric='cosine',
     random_state=42
 ).fit_transform(embeddings)
 
 print(f"Reduced embeddings shape: {reduced_embeddings.shape}")
 ```
 
-## 6. Configure UMAP Model for Topic Modeling (5D)
+## Configure Models
 
-For the actual topic modeling, we reduce to 5 dimensions instead of 2. This preserves more information while still reducing dimensionality enough for effective clustering.
-
-5 dimensions strikes a balance between: - Computational efficiency - Preserving semantic relationships - Effective clustering by HDBSCAN
+Set up UMAP (5D for clustering), HDBSCAN for clustering, and CountVectorizer with stopwords for topic representation.
 
 ```{python}
+# UMAP: Reduce to 5D for topic modeling
 umap_model = UMAP(
     n_neighbors=15,
     n_components=5,
@@ -237,15 +152,8 @@ umap_model = UMAP(
     metric='cosine',
     random_state=42
 )
-```
 
-## 7. Configure HDBSCAN Clustering Model
-
-**HDBSCAN** (Hierarchical Density-Based Spatial Clustering of Applications with Noise) is used to identify clusters in the reduced embedding space. Each cluster represents a topic.
-
-**Parameters:** - `min_cluster_size=50`: Minimum documents per topic (\~1.7% of dataset). Smaller values create more granular topics. - `min_samples=5`: How conservative the clustering is. Lower values allow more points to be clustered. - `metric='euclidean'`: Distance metric for clustering - `cluster_selection_method='eom'`: Excess of Mass method for selecting clusters - `prediction_data=True`: Allows predicting topics for new documents
-
-```{python}
+# HDBSCAN: Cluster documents into topics
 hdbscan_model = hdbscan.HDBSCAN(
     min_cluster_size=50,
     min_samples=5,
@@ -253,27 +161,15 @@ hdbscan_model = hdbscan.HDBSCAN(
     cluster_selection_method='eom',
     prediction_data=True
 )
-```
 
-## 8. Configure CountVectorizer with Stopwords
-
-**CountVectorizer** converts documents into a bag-of-words representation for topic description. We remove common stopwords in German, French, and Swiss German to focus on meaningful words.
-
-**Parameters:** - `min_df=2`: Ignore words appearing in fewer than 2 documents - `max_df=0.85`: Ignore words appearing in more than 85% of documents (too common) - `ngram_range=(1, 2)`: Consider both single words and two-word phrases - `stop_words`: Custom list of German, French, and Swiss German stopwords
-
-```{python}
-# Download stopwords (only needed once)
+# Stopwords
 nltk.download('stopwords', quiet=True)
-
-# Get German and French stopwords
 german_stopwords = set(stopwords.words('german'))
 french_stopwords = set(stopwords.words('french'))
-all_stopwords = german_stopwords.union(french_stopwords)
+swiss_german_stopwords = {'dass'}
+all_stopwords = german_stopwords.union(french_stopwords).union(swiss_german_stopwords)
 
-# Add Swiss German specific stopwords
-swiss_german_stopwords = {'dass'}  # Add more Swiss German words here if needed
-all_stopwords = all_stopwords.union(swiss_german_stopwords)
-
+# CountVectorizer: Extract topic keywords
 vectorizer_model = CountVectorizer(
     min_df=2,
     max_df=0.85,
@@ -284,64 +180,64 @@ vectorizer_model = CountVectorizer(
 print(f"Total stopwords: {len(all_stopwords)}")
 ```
 
-## 9. Configure Topic Representation Models
+## Configure Representation Models
 
-BERTopic allows multiple representation models to generate different perspectives on topic labels:
-
-1.  **KeyBERT**: Extracts keywords most similar to the topic using cosine similarity
-2.  **MMR (Maximal Marginal Relevance)**: Balances keyword relevance and diversity (`diversity=0.3`)
-3.  **OpenAI GPT-4o-mini**: Generates human-readable topic labels in English using representative documents and keywords
-
-The OpenAI model receives: - Top keywords from the topic - 5 representative documents (truncated to 200 words each) - A prompt to generate a concise English label (max 5 words)
+Set up KeyBERT and MMR for keyword extraction. OpenAI integration is commented out but available for generating human-readable labels.
 
 ```{python}
 # KeyBERT and MMR representation models
 keybert = KeyBERTInspired()
 mmr = MaximalMarginalRelevance(diversity=0.3)
 
-# # OpenAI representation model
-# print("Setting up OpenAI representation model...")
-# openai_api_key = os.getenv("OPENAI_API_KEY")
+# OpenAI representation model
+print("Setting up OpenAI representation model...")
+openai_api_key = os.getenv("OPENAI_API_KEY")
 
-# # Create OpenAI client
-# client = OpenAIClient(api_key=openai_api_key)
+# Add this before creating the OpenAI client
+# only for rendering quarto
+if "SSL_CERT_FILE" in os.environ:
+    print(f"SSL_CERT_FILE: {os.environ['SSL_CERT_FILE']}")
+    # Remove it if it's causing issues
+    del os.environ["SSL_CERT_FILE"]
+if "SSL_CERT_DIR" in os.environ:
+    print(f"SSL_CERT_DIR: {os.environ['SSL_CERT_DIR']}")
+    del os.environ["SSL_CERT_DIR"]
 
-# # Prompt for OpenAI to generate topic labels
-# openai_prompt = """
-# I have a topic described by the following keywords: [KEYWORDS]
+# Create OpenAI client
+client = OpenAIClient(api_key=openai_api_key)
 
-# The topic contains these representative documents:
-# [DOCUMENTS]
+# Prompt for OpenAI to generate topic labels
+openai_prompt = """
+I have a topic described by the following keywords: [KEYWORDS]
 
-# Based on the keywords and documents above, generate a short, descriptive label for this topic in English (maximum 5 words). Only return the label itself in English, nothing else.
-# """
+The topic contains these representative documents:
+[DOCUMENTS]
 
-# openai_model = OpenAI(
-#     client=client,
-#     model="gpt-4o-mini",  # Cost-effective model
-#     prompt=openai_prompt,
-#     chat=True,
-#     nr_docs=5,  # Number of representative documents to include
-#     doc_length=200,  # Maximum words per document
-#     tokenizer="whitespace"  # Required: method to tokenize documents
-# )
+Based on the keywords and documents above, generate a short, descriptive label for this topic in English (maximum 5 words). Only return the label itself in English, nothing else.
+"""
+
+openai_model = OpenAI(
+    client=client,
+    model="gpt-4o-mini",  # Cost-effective model
+    prompt=openai_prompt,
+    chat=True,
+    nr_docs=5,  # Number of representative documents to include
+    doc_length=200,  # Maximum words per document
+    tokenizer="whitespace"  # Required: method to tokenize documents
+)
 
 representation_model = {
     "KeyBERT": keybert,
-    "MMR": mmr#,
-    # "OpenAI": openai_model,
+    "MMR": mmr,
+    "OpenAI": openai_model,
 }
 
 print("Representation models configured.")
 ```
 
-## 10. Initialize and Fit BERTopic Model
+## Fit BERTopic Model
 
-Now we bring all components together and fit the BERTopic model:
-
-**Process:** 1. Use pre-computed embeddings to represent documents 2. Apply UMAP to reduce to 5D 3. Apply HDBSCAN to cluster similar documents 4. Use CountVectorizer to extract keywords from each cluster 5. Apply representation models to generate topic labels
-
-**Parameters:** - `nr_topics="auto"`: Automatically determine the number of topics (no merging) - `top_n_words=10`: Show top 10 words per topic - `verbose=True`: Display progress information
+Train the topic model on the climate transcripts.
 
 ```{python}
 print("Fitting BERTopic model...")
@@ -361,312 +257,58 @@ topics, probs = topic_model.fit_transform(documents, embeddings)
 print("\nModel fitting complete!")
 ```
 
-## 11. Add Topics to DataFrame
+## Extract and Save Results
 
-We add the assigned topic and probability to each document in the original dataframe. Topic `-1` indicates outliers that didn't fit well into any cluster.
+Add topic assignments to the dataframe and export results.
 
 ```{python}
 df['topic'] = topics
 df['topic_probability'] = probs
 
-print(df[['transcript_text', 'topic', 'topic_probability']].head())
-```
-
-## 12. Display Topic Analysis Results
-
-Let's examine the topics discovered by the model, including: - Total number of topics (excluding outliers) - Distribution of documents across topics - Detailed topic information with all representation models
-
-```{python}
-print(f"\nNumber of topics found: {len(set(topics)) - 1}")  # -1 for outlier topic
+print(f"\nNumber of topics found: {len(set(topics)) - 1}")  # -1 for outliers
 print("\nTopic distribution:")
 print(df['topic'].value_counts())
 
-# Get topic information with multiple representations
 topic_info = topic_model.get_topic_info()
 print("\nTopic Information:")
 print(topic_info)
+
+# Save results
+df.to_csv(data_dir / '06_documents_with_topics.csv', index=False)
+topic_info.to_csv(data_dir / '06_topic_info.csv', index=False)
 ```
 
-## 13. Save Results to CSV
+## Create Visualizations
 
-Export the results for further analysis: - **documents_with_topics.csv**: Original data with assigned topics - **topic_info.csv**: Topic labels and keywords from all representation models
-
-```{python}
-df.to_csv(data_dir / '12_documents_with_topics.csv', index=False)
-topic_info.to_csv(data_dir / '12_topic_info.csv', index=False)
-```
-
-## 14. Create Interactive Visualizations
-
-BERTopic provides several interactive visualizations:
-
-1.  **Document Visualization**: 2D plot showing all documents colored by topic
-2.  **Intertopic Distance Map**: Shows relationships between topics in 2D space
-3.  **Topic Hierarchy**: Dendrogram showing how topics relate hierarchically
-4.  **Topic Barchart**: Top words for each topic (showing top 10 topics)
-
-All visualizations are saved as interactive HTML files.
+Generate interactive HTML visualizations of topics and documents.
 
 ```{python}
 print("\nCreating visualizations...")
 
-# Visualize documents with pre-reduced embeddings
+# Document visualization
 fig_docs = topic_model.visualize_documents(
-    documents, 
+    documents,
     reduced_embeddings=reduced_embeddings,
     hide_document_hover=False,
     hide_annotations=False
 )
-fig_docs.write_html(output_dir / "12_topic_documents_visualization.html")
+fig_docs.write_html(output_dir / "06_topic_documents_visualization.html")
 print("  ✓ Document visualization saved")
 
-# Visualize intertopic distance map
+# Intertopic distance map
 fig_topics = topic_model.visualize_topics()
-fig_topics.write_html(output_dir / "12_intertopic_distance_map.html")
+fig_topics.write_html(output_dir / "06_intertopic_distance_map.html")
 print("  ✓ Intertopic distance map saved")
 
-# Visualize topic hierarchy
+# Topic hierarchy
 fig_hierarchy = topic_model.visualize_hierarchy()
-fig_hierarchy.write_html(output_dir / "12_topic_hierarchy.html")
+fig_hierarchy.write_html(output_dir / "06_topic_hierarchy.html")
 print("  ✓ Topic hierarchy saved")
 
-# Visualize barchart of top words per topic
+# Topic barchart
 fig_barchart = topic_model.visualize_barchart(top_n_topics=10)
-fig_barchart.write_html(output_dir / "12_topic_barchart.html")
+fig_barchart.write_html(output_dir / "06_topic_barchart.html")
 print("  ✓ Topic barchart saved")
 
 print(f"\nProcessing complete! Check the {output_dir} folder for visualizations.")
-```
-
-## Summary
-
-This notebook performed topic modeling on climate transcripts using: - Multilingual sentence embeddings - UMAP for dimensionality reduction - HDBSCAN for density-based clustering - Multiple representation models (KeyBERT, MMR, OpenAI)
-
-The OpenAI integration provides human-readable English labels that summarize each topic based on keywords and representative documents.
-
-**Next steps:** - Examine the visualizations in the Outputs folder - Review topic_info.csv to see all topic representations - Analyze documents_with_topics.csv to understand topic assignments - Consider adjusting `min_cluster_size` or other parameters if topics are too broad or too granular
-
-# Setup
-
-Import all necessary packages and functions.
-
-```{r}
-#| label: setup
-
-library(tidyverse)
-library(here)
-library(knitr)
-```
-
-# Data Import
-
-Read in all presaved data.
-
-```{r}
-#| label: data import
-
-# todo: data sources mit der neuen version ersetzen (12_filename.csv)
-
-documents_with_topics <- read_csv(here("Data/documents_with_topics.csv")) |>
-  mutate(
-    transcript_id = as.character(transcript_id),
-    topic = sprintf("%02d", as.numeric(topic))
-  ) |> 
-  filter(topic != -1)
-
-topic_info <- read_csv(here("Data/topic_info.csv")) |>
-  rename(topic = Topic, topic_name = Name) |>
-  mutate(topic = sprintf("%02d", as.numeric(topic))
-  ) |> 
-  filter(topic != -1)
-
-paragraphs_climate <- read_rds(here("Data/paragraphs_classified_wide_final.rds")) |> 
-    filter(final_climate == TRUE) |> 
-    mutate(
-    ParlGroupName = case_when(
-      ParlGroupAbbreviation %in% c("M-E", "BD") ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
-      .default = ParlGroupName
-    )
-  )
-```
-
-# Data Preparation
-
-```{r}
-documents_with_topics_wide <- documents_with_topics |>
-  left_join(topic_info, by = join_by(topic))
-
-paragraphs_topics_wide <- documents_with_topics_wide |>
-  inner_join(
-    paragraphs_climate,
-    by = join_by(transcript_id),
-    relationship = "one-to-many" # has multiple paragraphs per transcript
-  ) |>
-  drop_na(ParlGroupAbbreviation)
-```
-
-# Visualization Setup
-
-```{r}
-party_names_order <- c(
-  "Sozialdemokratische Fraktion",
-  "Grüne Fraktion", 
-  "Die Mitte-Fraktion / CVP-& BD-Fraktion",
-  "Grünliberale Fraktion",
-  "FDP-Liberale Fraktion",
-  "Fraktion der Schweizerischen Volkspartei"
-)
-
-party_colors <- c(
-  "Sozialdemokratische Fraktion" = "#E4032E",
-  "Grüne Fraktion" = "#84B547",
-  "Die Mitte-Fraktion / CVP-& BD-Fraktion" = "#FF8C00",
-  "Grünliberale Fraktion" = "#650959ff",
-  "FDP-Liberale Fraktion" = "#0571C1",
-  "Fraktion der Schweizerischen Volkspartei" = "#00843D"
-)
-```
-
-# Visualize Topic Representation
-
-Let's first look what each topic represents.
-
-```{r}
-topic_representation <- topic_info |> 
-  select(topic, OpenAI)
-write_rds(topic_representation, here("Outputs/13_topic_representation.rds"))
-topic_representation |> 
-  kable(
-    caption = "Topic Representation based on OpenAI summaries",
-    col.names = c("Topic", "Representation")
-  )
-```
-
-# Visualize Topic Distribution
-
-Let's first look at the overall distribution of topics.
-
-```{r}
-df_topic_distribution <- paragraphs_topics_wide |> 
-  group_by(topic) |> 
-  summarise(n_paragraphs = n()) |> 
-  mutate(
-    topic = factor(topic, levels = rev(sort(unique(topic)))),
-    pct_total = n_paragraphs / sum(n_paragraphs) * 100
-  )
-
-plot <- ggplot(df_topic_distribution, aes(x = topic, y = pct_total)) +
-  geom_col(fill = "steelblue") +
-  geom_text(aes(
-    label = paste0(round(pct_total, 1), "%")), 
-    hjust = -0.2, size = 3) +
-  coord_flip() +
-  labs(
-    x = "Topic",
-    y = "Percentage of Total Paragraphs",
-    title = "Distribution of Paragraphs across Topics"
-  ) +
-  theme_minimal()
-
-ggsave(here("Outputs/13_plot_topic_distribution.png"))
-write_rds(plot, here("Outputs/13_plot_topic_distribution.rds"))
-
-# show the plot
-plot
-```
-
-# Visualize All Topics per Party
-
-Let's visualize the parties per topic.
-
-```{r}
-df_plot <- paragraphs_topics_wide |>
-  group_by(topic, ParlGroupName) |>
-  summarise(
-    group_count = n(),
-    .groups = 'drop_last'
-  ) |>
-  mutate(
-    pct_of_topic = group_count / sum(group_count) * 100,
-    ParlGroupName = factor(ParlGroupName, levels = party_names_order)
-  ) |>
-  drop_na()
-
-plot <- ggplot(
-  df_plot,
-  aes(x = "", y = pct_of_topic, fill = ParlGroupName)
-) +
-  geom_col() +
-  coord_polar("y", start = 0) +
-  facet_wrap(vars(topic)) +
-  scale_fill_manual(values = party_colors) +
-  labs(
-    title = "Speeches per Party and Topic",
-    fill = "" # no description for the legend
-  ) +
-  theme_void() +
-  theme(
-    legend.position = "bottom",
-    legend.text = element_text(size = 9),
-    plot.title = element_text(hjust = 0.5),
-    strip.text = element_text(size = 10, face = "bold")
-  ) +
-  guides(fill = guide_legend(nrow = 3))
-
-ggsave(here("Outputs/13_plot_topic_party_distribution.png"))
-write_rds(plot, here("Outputs/13_plot_topic_party_distribution.rds"))
-
-# show the plot
-plot
-```
-
-# Visualize Single Topics
-
-```{r}
-
-# todo: loop over topics
-
-topic_to_visualize <- "01"
-
-df_plot <- paragraphs_topics_wide |>
-  filter(topic == topic_to_visualize) |> 
-  group_by(ParlGroupName) |>
-  summarise(
-    group_count = n(),
-    .groups = 'drop_last'
-  ) |>
-  mutate(
-    pct_of_topic = group_count / sum(group_count) * 100,
-    ParlGroupName = factor(ParlGroupName, levels = party_names_order)
-  ) |>
-  drop_na()
-
-plot <- ggplot(
-  df_plot,
-  aes(x = "", y = pct_of_topic, fill = ParlGroupName)
-  ) +
-  geom_col() +
-  geom_text(aes(
-    label = paste0(round(pct_of_topic, 1), "%")),
-    position = position_stack(vjust = 0.5)
-  ) +
-  coord_polar("y", start = 0) +
-  scale_fill_manual(values = party_colors) +
-  labs(
-    title = paste("Speech Proportion per Party for Topic", topic_to_visualize),
-    fill = "" # no description for the legend
-  ) +
-  theme_void() +
-  theme(
-    legend.position = "bottom",
-    legend.text = element_text(size = 9),
-    plot.title = element_text(hjust = 0.5)
-  ) +
-  guides(fill = guide_legend(nrow = 3))
-
-ggsave(here(paste0("Outputs/13_plot_topic_", topic_to_visualize, ".png")))
-write_rds(plot, here(paste0("Outputs/13_plot_topic_", topic_to_visualize, ".rds")))
-
-# show the plot
-plot
 ```
