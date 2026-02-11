@@ -6,8 +6,7 @@
 Data/
 Scripts/arc/
 arc/
-.quarto/
-*.rds
+Outputs/
 
 # BERT-Finetuning/arc/
 # BERTopic/arc/
@@ -24,5 +23,7 @@ arc/
 
 
 **/*.quarto_ipynb
+.quarto/
+.quarto/
 
 /.quarto/
