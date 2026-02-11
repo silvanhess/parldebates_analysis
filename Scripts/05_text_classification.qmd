@@ -1,11 +1,11 @@
 ---
-title: "Speech Classification"
-format: pdf
+title: "Text Classification"
+format: html
 execute:
   warning: false
 ---
 
-## Setup
+# Setup
 
 Import all necessary packages and functions.
 
@@ -21,28 +21,31 @@ library(zoo)
 source(here("Scripts/00_functions.R"))
 ```
 
-## Data Import
-
-Read in all presaved data.
+# Import Data
 
 ```{r}
-#| label: data import
+#| label: data-import
 
-paragraphs_cleaned <- read_rds(here("Data/paragraphs_cleaned.rds"))
-french_dictionary_curated <- read.xlsx(
-  here("french_dictionary_curated.xlsx")) |>
+paragraphs_cleaned <- read_rds(here("Data/02_paragraphs_cleaned.rds"))
+# businesses_cleaned <- 
+#   read_rds(here("Data/01_businesses_cleaned.rds")) |> 
+#   select(BusinessShortNumber, Title)
+subjects <- 
+  read_rds(here("Data/02_subjects.rds")) |> 
+  select(IdSubject, BusinessShortNumber, Title)
+french_dictionary_curated <- 
+  read.xlsx(here("french_dictionary_curated.xlsx")) |>
   rename(keyword_original = keyword_french)
-german_dictionary_curated <- read.xlsx(
-  here("german_dictionary_curated.xlsx")) |>
+german_dictionary_curated <- 
+  read.xlsx(here("german_dictionary_curated.xlsx")) |>
   rename(keyword_original = keyword_german)
-businesses_cleaned <- read_rds(
-  here("Data/businesses_cleaned.rds"))
-subjects <- read_rds(here("Data/subjects.rds"))
 ```
+
+# Data Preparation
 
 ## Dictionary
 
-Prepare the dictionary.
+Combine the curated German and French dictionaries into a single lookup table. Keywords are lowercased, stripped of non-alphanumeric characters (except hyphens and apostrophes), and whitespace-normalised.
 
 ```{r}
 #| label: dictionary
@@ -55,18 +58,16 @@ dictionary_all_cleaned <- german_dictionary_curated |>
     keyword_original = str_squish(keyword_original)
   )
 
-# save as rds
-write_rds(
-  dictionary_all_cleaned, 
-  here("Data/dictionary_all_cleaned.rds"))
+write_rds(dictionary_all_cleaned, here("Data/05_dictionary_all_cleaned.rds"))
 ```
 
-## Data Pre-Processing
+## Text Pre-Processing
 
-Pre-process the data.
+Tokenise the paragraph texts into individual words, apply the same normalisation as the dictionary, and remove German and French stopwords.
 
 ```{r}
-#| label: data cleaning
+#| label: preprocessing
+
 paragraphs_words <- paragraphs_cleaned |>
   select(paragraph_id, paragraph_text) |>
   unnest_tokens(
@@ -76,20 +77,15 @@ paragraphs_words <- paragraphs_cleaned |>
     drop = FALSE
   )
 
-# get german stopwords from stopwords package
-# add additional stopwords
 german_stopwords <- c(
   stopwords::stopwords("de", source = "snowball"),
   "dass"
 ) |>
   sort()
 
-# get french stopwords from stopwords package
 french_stopwords <- stopwords::stopwords("fr", source = "snowball")
 
-# put together stopwords
 stopwords_all <- tibble(stopwords = c(german_stopwords, french_stopwords))
-# write_rds(stopwords_all, "Data/stopwords_all.rds")
 
 paragraphs_words_cleaned <- paragraphs_words |>
   mutate(
@@ -99,16 +95,15 @@ paragraphs_words_cleaned <- paragraphs_words |>
   ) |>
   anti_join(stopwords_all, by = join_by(word == stopwords))
 
-# save as rds
-write_rds(paragraphs_words_cleaned, here("Data/paragraphs_words_cleaned.rds"))
+write_rds(paragraphs_words_cleaned, here("Data/05_paragraphs_words_cleaned.rds"))
 ```
 
-## Dictionary Classification
+# Dictionary Classification
 
-Apply the Dictionary to the Data and count the number of matches.
+Match each word against the dictionary and aggregate results at the paragraph level to determine which paragraphs contain at least one keyword match.
 
 ```{r}
-#| label: apply dictionary
+#| label: apply-dictionary
 
 paragraphs_classified <- paragraphs_words_cleaned |>
   left_join(dictionary_all_cleaned, by = join_by(word == keyword_original)) |>
@@ -121,14 +116,13 @@ paragraphs_classified <- paragraphs_words_cleaned |>
   ) |>
   left_join(paragraphs_cleaned, by = join_by(paragraph_id))
 
-# save as rds
-write_rds(paragraphs_classified, here("Data/paragraphs_classified.rds"))
+write_rds(paragraphs_classified, here("Data/05_paragraphs_classified.rds"))
 ```
 
-The classification happens in three steps. First define businesses that have climate paragraphs as climate_businesses.
+The final climate label is assigned in three steps. First, businesses that contain at least one climate paragraph are identified as climate businesses.
 
 ```{r}
-#| label: climate businesses
+#| label: climate-businesses
 
 paragraphs_subjects <- left_join(
   paragraphs_classified,
@@ -137,25 +131,25 @@ paragraphs_subjects <- left_join(
   relationship = "many-to-many"
 )
 
-paragraphs_subjects_businesses <- left_join(
-  paragraphs_subjects,
-  businesses_cleaned,
-  by = join_by(BusinessShortNumber),
-  relationship = "many-to-one"
-)
+# paragraphs_subjects_businesses <- left_join(
+#   paragraphs_subjects,
+#   businesses_cleaned,
+#   by = join_by(BusinessShortNumber),
+#   relationship = "many-to-one"
+# )
 
-climate_businesses <- paragraphs_subjects_businesses |>
+climate_businesses <- paragraphs_subjects |>
   filter(climate_paragraph == TRUE) |>
   distinct(BusinessShortNumber) |>
   pull(BusinessShortNumber)
 ```
 
-Second define paragraphs that belong to a climate business as climate relevant.
+Second, all paragraphs belonging to a climate business are marked as climate-relevant.
 
 ```{r}
-#| label: climate paragraphs
+#| label: climate-paragraphs
 
-paragraphs_classified_wide <- paragraphs_subjects_businesses |>
+paragraphs_classified_wide <- paragraphs_subjects |>
   mutate(
     climate = case_when(
       BusinessShortNumber %in% climate_businesses ~ TRUE,
@@ -165,37 +159,43 @@ paragraphs_classified_wide <- paragraphs_subjects_businesses |>
   rename(paragraph_text = paragraph_text.x)
 ```
 
-Third define businesses that have at least 10% of the paragraphs that match the dictionary as final_climate.
+Third, a business is assigned a `final_climate` label if at least 10% of its paragraphs match the dictionary. This threshold ensures that only businesses with substantive climate content are included.
 
 ```{r}
+#| label: final-climate
+
 paragraphs_classified_wide_final <- paragraphs_classified_wide |>
-group_by(BusinessShortNumber) |>
-mutate(
-  n_paragraphs = n(),
-  n_climate_paragraphs = sum(climate_paragraph),
-  proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
-  final_climate = case_when(
-    proportion_climate_paragraphs >= 0.1 ~ TRUE,
-    .default = FALSE
-  ),
-  .groups = "drop"
-)
+  group_by(BusinessShortNumber) |>
+  mutate(
+    n_paragraphs = n(),
+    n_climate_paragraphs = sum(climate_paragraph),
+    proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
+    final_climate = case_when(
+      proportion_climate_paragraphs >= 0.1 ~ TRUE,
+      .default = FALSE
+    )
+  ) |>
+  ungroup()
 
 write_rds(
-  paragraphs_classified_wide_final, 
-  here("Data/paragraphs_classified_wide_final.rds"))
+  paragraphs_classified_wide_final,
+  here("Data/05_paragraphs_classified_wide_final.rds"))
 ```
 
-Important: The climate related debates are therefore based on the nature of the discussed parliamentary business. If the business is considered climate related, all debates around this business are considered climate related.
+The climate label is therefore assigned at the business level: if a parliamentary business is considered climate-related, all debates around it are treated as climate-related.
 
 # Visualize
 
 ## Visualization Setup
 
+Define party display order and colour palette for all subsequent plots.
+
 ```{r}
+#| label: viz-setup
+
 party_names_order <- c(
   "Sozialdemokratische Fraktion",
-  "Grüne Fraktion", 
+  "Grüne Fraktion",
   "Die Mitte-Fraktion / CVP-& BD-Fraktion",
   "Grünliberale Fraktion",
   "FDP-Liberale Fraktion",
@@ -212,9 +212,9 @@ party_colors <- c(
 )
 ```
 
-Let's visualize the data. First show many paragraphs are climate relevant vs. non-relevant.
-
 ## Across Categories
+
+Share of climate-relevant vs. non-relevant paragraphs across the full dataset.
 
 ```{r}
 p <- plot_categorical_distribution(
@@ -222,18 +222,16 @@ p <- plot_categorical_distribution(
   group_col = "final_climate",
   x_label = "Climate Relevant Paragraph",
   title = "Distribution of Climate Relevant Paragraphs",
-  output_path = "Outputs/10_paragraphs_climate_distribution.png"
+  output_path = "Outputs/05_paragraphs_climate_distribution.png"
 )
-write_rds(p, here("Outputs/10_paragraphs_climate_distribution.rds"))
-
-# show the plot
+write_rds(p, here("Outputs/05_paragraphs_climate_distribution.rds"))
 p
 ```
 
-Show how many businesses are climate relevant vs. non-relevant
+Share of climate-relevant vs. non-relevant businesses.
 
 ```{r}
-df_grouped <- paragraphs_classified_wide_final |> 
+df_grouped <- paragraphs_classified_wide_final |>
   distinct(BusinessShortNumber, final_climate)
 
 p <- plot_categorical_distribution(
@@ -243,44 +241,20 @@ p <- plot_categorical_distribution(
   y_label = "Percentage of Businesses",
   label_suffix = "businesses",
   title = "Distribution of Climate Relevant Businesses",
-  output_path = "Outputs/10_paragraphs_climate_distribution.png"
+  output_path = "Outputs/05_businesses_climate_distribution.png"
 )
-write_rds(p, here("Outputs/10_paragraphs_climate_distribution.rds"))
-
-# show the plot
+write_rds(p, here("Outputs/05_businesses_climate_distribution.rds"))
 p
-```
-
-## Categories Across Parties
-
-```{r}
-share <- paragraphs_classified_wide_final |> 
-  mutate(
-    ParlGroupName = case_when(
-      ParlGroupAbbreviation == "M-E|BD" ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
-      .default = ParlGroupName
-    )
-  ) |> 
-  group_by(ParlGroupName, final_climate) |> 
-  summarise(
-    party_climate_share = sum(paragraph_word_count),
-    .groups = "drop") |> 
-  group_by(meeting_date, ParlGroupName) |> 
-  mutate(
-    ParlGroupName = factor(ParlGroupName, levels = party_names_order)) |>
-  arrange(ParlGroupName, final_climate) |>
-  drop_na(ParlGroupName)
 ```
 
 ## Categories Over Time
 
-In absolute terms, the number of climate relevant paragraphs in comparison to non-climate paragraphs developed like this.
+In absolute terms, the number of climate-relevant vs. non-climate paragraphs over time.
 
 ```{r}
-# in absolute terms
-df_grouped <- paragraphs_classified_wide_final |> 
-  mutate(meeting_date = as.Date(Start)) |> 
-  group_by(meeting_date, final_climate) |> 
+df_grouped <- paragraphs_classified_wide_final |>
+  mutate(meeting_date = as.Date(Start)) |>
+  group_by(meeting_date, final_climate) |>
   summarise(count = n(), .groups = "drop")
 
 p <- ggplot(df_grouped, aes(x = meeting_date, y = count, color = final_climate)) +
@@ -293,72 +267,95 @@ p <- ggplot(df_grouped, aes(x = meeting_date, y = count, color = final_climate))
     color = "Climate"
   ) +
   theme_minimal()
-ggsave(here("Outputs/10_plot_timeseries_absolute.png"))
-write_rds(p, here("Outputs/10_plot_timeseries_absolute.rds"))
-
-# show the plot
+ggsave(here("Outputs/05_plot_timeseries_absolute.png"))
+write_rds(p, here("Outputs/05_plot_timeseries_absolute.rds"))
 p
 ```
 
-Show how the proportion of climate relevant paragraphs developed over the last 10 years.
+In relative terms, the share of climate-relevant paragraphs over the last 10 years, with a 30-session rolling average.
 
 ```{r}
-# in relative terms
-share <- paragraphs_classified_wide_final |> 
-  mutate(meeting_date = as.Date(Start)) |> 
-  group_by(meeting_date) |> 
-  summarise(share_climate = mean(final_climate) * 100) |> 
-  arrange(meeting_date) |> 
+share <- paragraphs_classified_wide_final |>
+  group_by(meeting_date) |>
+  summarise(
+    share_climate = sum(paragraph_word_count[final_climate == TRUE]) / sum(paragraph_word_count) * 100
+  ) |>
+  arrange(meeting_date) |>
   mutate(rolling_avg = rollmean(share_climate, k = 30, fill = NA))
 
 p <- ggplot(share, aes(x = meeting_date)) +
   geom_line(aes(y = share_climate), alpha = 0.3, color = "gray50") +
   geom_line(aes(y = rolling_avg), color = "steelblue", size = 1) +
-    labs(
+  labs(
     title = "Share of Climate Related Debates",
     x = "Date",
     y = "Share (%)"
   ) +
   theme_minimal()
-ggsave(here("Outputs/10_plot_timeseries_relative.png"))
-write_rds(p, here("Outputs/10_plot_timeseries_relative.rds"))
+ggsave(here("Outputs/05_plot_timeseries_relative.png"))
+write_rds(p, here("Outputs/05_plot_timeseries_relative.rds"))
+p
+```
 
-# show the plot
+## Climate Share Across Parties
+
+Share of words spoken in climate-related debates per parliamentary group, measured as a percentage of each party's total word count.
+
+```{r}
+share_words <- paragraphs_classified_wide_final |>
+  filter(final_climate == TRUE) 
+  group_by(ParlGroupName) |>
+  summarise(
+    total_words = sum(paragraph_word_count),
+    share = total_words / sum(total_words) * 100,
+    ParlGroupName = factor(ParlGroupName, levels = rev(party_names_order))
+  )
+
+p <- share_words |>
+  ggplot(aes(x = share, y = ParlGroupName, fill = ParlGroupName)) +
+  geom_col() +
+  scale_fill_manual(values = party_colors) +
+  labs(
+    title = "Climate Share of Parliamentary Debates per Party",
+    x = "Share of Words in Climate Debates (%)",
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggsave(here("Outputs/05_plot_climate_share_per_party.png"), width = 10, height = 6)
+write_rds(p, here("Outputs/05_plot_climate_share_per_party.rds"))
 p
 ```
 
 ## Climate Across Parties Over Time
 
-Let's see which parties have been most active in climate debates over time.
+Share of climate-related speeches per parliamentary group over time (30-session rolling average).
+
+### Absolute terms
+
+This means disregarding the total word count of each party. Just looking at the share of one party divided by the total word count of climate debates in that session, without accounting for the fact that some parties speak more than others.
 
 ```{r}
-share <- paragraphs_classified_wide_final |> 
-  filter(final_climate == TRUE) |> 
-  mutate(
-    meeting_date = as.Date(Start),
-    ParlGroupName = case_when(
-      ParlGroupAbbreviation == "M-E|BD" ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
-      .default = ParlGroupName
-    )
-  ) |> 
-  group_by(meeting_date) |> 
-  mutate(total_climate = n()) |> 
-  group_by(meeting_date, ParlGroupName) |> 
+share <- paragraphs_classified_wide_final |>
+  filter(final_climate == TRUE) |>
+  group_by(meeting_date) |>
+  mutate(total_climate_words = sum(paragraph_word_count)) |>
+  group_by(meeting_date, ParlGroupName) |>
   summarise(
-    share_party = (n() / first(total_climate)) * 100,
-    .groups = "drop") |> 
+    share_party = (sum(paragraph_word_count) / first(total_climate_words)) * 100,
+    .groups = "drop") |>
   mutate(
     ParlGroupName = factor(ParlGroupName, levels = party_names_order)) |>
-  arrange(meeting_date, ParlGroupName) |> 
-  group_by(ParlGroupName) |> 
-  mutate(rolling_avg = rollmean(share_party, k = 30, fill = NA)) |> 
-  drop_na(ParlGroupName)
+  arrange(meeting_date, ParlGroupName) |>
+  group_by(ParlGroupName) |>
+  mutate(rolling_avg = rollmean(share_party, k = 30, fill = NA)) |>
 
 p <- ggplot(share, aes(x = meeting_date, y = rolling_avg, color = ParlGroupName)) +
   geom_line(size = 1) +
   scale_color_manual(values = party_colors) +
   labs(
-    title = "Share of Climate Related Debates per Party",
+    title = "Absolute Share of Climate Related Debates per Party",
     x = "Date",
     y = "Share (%)",
     color = "Party Group"
@@ -369,15 +366,51 @@ p <- ggplot(share, aes(x = meeting_date, y = rolling_avg, color = ParlGroupName)
     legend.text = element_text(size = 9)
   ) +
   guides(color = guide_legend(nrow = 2))
-ggsave(here("Outputs/10_plot_timeseries_per_party.png"), width = 10, height = 8)
-write_rds(p, here("Outputs/10_plot_timeseries_per_party.rds"))
-
-# show the plot
+ggsave(here("Outputs/05_plot_timeseries_per_party_absolute.png"), width = 10, height = 8)
+write_rds(p, here("Outputs/05_plot_timeseries_per_party_absolute.rds"))
 p
 ```
 
-There was a time when the mainstream right and populist right parties dominated the climate debate until around 2021, after which it became much more balanced between the parties, with the Greens having the largest share of the discussion.
+### relative terms
 
-Interestingly, the proportion of speeches made by the Greens and Green Liberals diverges sharply from 2020 onwards.
+This means accounting for the total word count of each party. Looking at the share of one party in climate debates relative to that party's total word count in that session. This way we can see how much of each party's speech is dedicated to climate topics, regardless of how much they speak overall.
 
-The graph does not take into account the size of the parliamentary groups. On average, the mainstream left and mainstream right have a larger share than the Greens and Green Liberals, with the right-wing populist SVP having the largest share in parliament (Source: https://www.parlament.ch/de/organe/fraktionen/).
+```{r}
+share <- paragraphs_classified_wide_final |>
+  group_by(meeting_date, ParlGroupName) |>
+  summarise(
+    total_words = sum(paragraph_word_count),
+    climate_words = sum(paragraph_word_count[final_climate == TRUE]),
+    .groups = "drop"
+  ) |>
+  mutate(
+    share_party = climate_words / total_words * 100,
+    ParlGroupName = factor(ParlGroupName, levels = party_names_order)
+  ) |>
+  arrange(meeting_date, ParlGroupName) |>
+  group_by(ParlGroupName) |>
+  mutate(rolling_avg = rollmean(share_party, k = 30, fill = NA))
+
+p <- ggplot(share, aes(x = meeting_date, y = rolling_avg, color = ParlGroupName)) +
+  geom_line(size = 1) +
+  scale_color_manual(values = party_colors) +
+  labs(
+    title = "Relative Share of Climate Related Debates per Party",
+    x = "Date",
+    y = "Share (%)",
+    color = "Party Group"
+  ) +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    legend.text = element_text(size = 9)
+  ) +
+  guides(color = guide_legend(nrow = 2))
+ggsave(here("Outputs/05_plot_timeseries_per_party_relative.png"), width = 10, height = 8)
+write_rds(p, here("Outputs/05_plot_timeseries_per_party_relative.rds"))
+p
+```
+
+Until around 2021, the mainstream and populist right dominated climate debates. After that point the distribution became more balanced across parties, with the Greens taking the largest share. Notably, the trajectories of the Greens and Green Liberals diverge sharply from 2020 onwards.
+
+The graph does not account for the relative size of parliamentary groups. The mainstream left and right tend to have larger shares than the Greens and Green Liberals, with the SVP holding the largest share in parliament overall (see [parlament.ch](https://www.parlament.ch/de/organe/fraktionen/)).

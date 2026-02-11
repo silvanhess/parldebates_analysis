@@ -1,36 +1,38 @@
 ---
-title: "Untitled"
+title: "Handcoding Data"
 format: html
+execute:
+  warning: false
 ---
 
-# Handcoding Dataset Creation
+# Setup
+
+Import required packages and helper functions.
 
 ```{r}
-# libraries --------------------------------------------------------------
-
 library(tidyverse)
+library(dotenv)
+library(here)
+source(here("Scripts/00_functions.R"))
+load_dot_env(here(".env"))
+```
 
-# import data ------------------------------------------------------------
+# Import Data
 
-paragraphs_cleaned <- read_rds("Data/paragraphs_cleaned.rds")
+```{r}
+paragraphs_cleaned <- read_rds(here("Data/02_paragraphs_cleaned.rds"))
+```
 
-# create dataset for labeling --------------------------------------------
+# Create Handcoding Dataset
 
-# create a balanced dataset for labeling
-# for the initial training of the classifier we want to have
-# 1000 paragraphs labeled with an even distribution between french and german
-# also: we want to have both climate related and not climate related paragraphs
-# to achieve this, we will sample more paragraphs from businesses that have a
-# higher chance of having climate related paragraphs
-# final dataset should have:
+Create a balanced sample of 1000 paragraphs for manual labeling. The sampling targets:
 
-# 50/50 distribution between french and german
-# 70/30 distribution between Climate Businesses and not Climate Businesses
+- 50/50 distribution between French and German paragraphs
+- 70/30 distribution between climate-related and non-climate businesses
 
-# groups_before <- transcripts_cleaned |>
-#   count(ClimateBusiness, LanguageOfText) |>
-#   mutate(percentage = n / sum(n) * 100)
+To achieve this, paragraphs from climate-related businesses and French-language paragraphs are upweighted during sampling.
 
+```{r}
 set.seed(1234)
 handcoding_dataset <- paragraphs_cleaned |>
   mutate(
@@ -43,78 +45,88 @@ handcoding_dataset <- paragraphs_cleaned |>
     weight_by = weight
   )
 
-# groups_after <- transcripts_sampled |>
-#   count(ClimateBusiness, LanguageOfText) |>
-#   mutate(percentage = n / sum(n) * 100)
+write_rds(handcoding_dataset, here("Data/03_handcoding_dataset.rds"))
+```
 
-write_rds(handcoding_dataset, "Data/handcoding_dataset.rds")
+# Visualize
 
-# plot data ------------------------------------------------------------------
+Plot paragraph length distribution.
 
-# transcripts_sampled <- readRDS("Data/transcripts_sampled.rds")
-# transcripts_cleaned |> pull(paragraph) |> sample(10)
-
-# plot distribution of text lengths
+```{r}
 plot_word_count_distribution(
   data = handcoding_dataset,
   title = "Distribution of Paragraph Lengths in Handcoding Dataset",
-  output_path = "Outputs/handcoding_dataset_text_length_distribution.png"
+  output_path = "Outputs/03_handcoding_dataset_text_length_distribution.png"
 )
+```
 
-# plot distribution of languages
+Plot language distribution.
+
+```{r}
 plot_categorical_distribution(
   data = handcoding_dataset,
   group_col = "LanguageOfText",
-  title = "Distribution of Languages in Handcoding Dataset",
   x_label = "Language of Paragraphs",
-  output_path = "Outputs/handcoding_dataset_language_distribution.png")
+  title = "Distribution of Languages in Handcoding Dataset",
+  output_path = "Outputs/03_handcoding_dataset_language_distribution.png"
+)
+```
 
-# plot business tag distribution
+Plot business tag distribution.
+
+```{r}
 plot_categorical_distribution(
   data = handcoding_dataset,
   group_col = "business_tag_climate",
   x_label = "Energy, Transport or Environment Related Business",
   title = "Distribution of Business Tags in Handcoding Dataset",
-  output_path = "Outputs/handcoding_dataset_business_tags_distribution.png"
+  output_path = "Outputs/03_handcoding_dataset_business_tags_distribution.png"
 )
 ```
 
-# Translate paragraphs for handcoding
+# Translate Paragraphs
+
+Translate all paragraphs (both French and German) to English using the DeepL API so that the handcoding dataset is in a single language. Credentials are loaded from the `.env` file.
 
 ```{r}
-# libraries --------------------------------------------------------------
+handcoding_dataset_full <- if (file.exists(here("Data/03_handcoding_translations.rds"))) {
 
-library(tidyverse)
-library(dotenv)
-source("Scripts/00_functions.R")
+  translations_df <- read_rds(here("Data/03_handcoding_translations.rds"))
+  handcoding_dataset |> left_join(translations_df, by = join_by(paragraph_id))
 
-# Translage  for handcoding ----------------------------------------------
+} else {
 
-handcoding_dataset <- read_rds("Data/handcoding_dataset.rds")
+  translations_vec <- map_chr(
+    handcoding_dataset$paragraph_text,
+    deepl_translate,
+    .progress = TRUE
+  )
 
-# # count characters in french
-# transcripts_sampled |>
-#   filter(LanguageOfText == "FR") |>
-#   summarise(total_characters = sum(Textlength))
+  translations_df <- tibble(
+    paragraph_id = handcoding_dataset$paragraph_id,
+    paragraph_translated = translations_vec
+  )
 
-# Load Deepl Credentials
-load_dot_env()
+  write_rds(translations_df, here("Data/03_handcoding_translations.rds"))
+  handcoding_dataset |> left_join(translations_df, by = join_by(paragraph_id))
 
-handcoding_dataset$paragraph_translated <- map_chr(
-  handcoding_dataset$paragraph,
-  deepl_translate,
-  .progress = TRUE
-)
+}
+```
 
-handcoding_dataset_translated <- handcoding_dataset |>
-  select(ID, ClimateBusiness, LanguageOfText, paragraph, paragraph_translated)
+# Export
 
-# handcoding_dataset <- readRDS("Data/handcoding_dataset.rds")
-# transcripts_sampled <- readRDS("Data/transcripts_sampled.rds")
-# handcoding_dataset <- inner_join(handcoding_dataset, transcripts_sampled, by = join_by(ID)) |> 
-#   select(ID, ClimateBusiness.x, LanguageOfText.x, paragraph, paragraph_translated) |> 
-#     rename(ClimateBusiness = ClimateBusiness.x, LanguageOfText = LanguageOfText.x)
+Select relevant columns and export to CSV for labeling in Label Studio.
 
-# export to csv for labeling in label-studio
-write_csv(handcoding_dataset_translated, "Data/handcoding_dataset_translated.csv")
+```{r}
+handcoding_dataset_translated <- handcoding_dataset_full |>
+  select(
+    transcript_id,
+    paragraph_id,
+    business_tag_climate,
+    LanguageOfText,
+    paragraph_text,
+    paragraph_translated
+  )
+
+write_csv(handcoding_dataset_translated, here("Data/03_handcoding_dataset_translated.csv"))
 ```

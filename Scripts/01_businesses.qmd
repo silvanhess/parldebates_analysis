@@ -57,10 +57,11 @@ businesses <- map_dfr(
   list.files(here("Data/businesses"), full.names = T),
   read_rds
 )
-write_rds(businesses, here("Data/businesses.rds"))
+write_rds(businesses, here("Data/01_businesses.rds"))
 ```
 
 # Inspect Businesses
+
 Now that I have all the businesses, I can start to inspect the data. Let's see what's inside the business tags.
 
 ```{r}
@@ -151,5 +152,5 @@ businesses_cleaned <- businesses |>
     business_tag_climate = str_detect(Tags, "52|48|66"),
   )
 
-write_rds(businesses_cleaned, here("Data/businesses_cleaned.rds"))
+write_rds(businesses_cleaned, here("Data/01_businesses_cleaned.rds"))
 ```

@@ -7,7 +7,7 @@ execute:
 
 # Setup
 
-Import all necessary packages and functions.
+Import required packages and helper functions.
 
 ```{r}
 library(tidyverse)
@@ -16,23 +16,24 @@ library(furrr)
 library(future)
 library(tidytext)
 library(here)
-
-# source plot functions
 source(here("Scripts/00_functions.R"))
+```
 
-# set up parallel processing with background R sessions
-# adjust number of workers as needed
-# default: 6 for subject_business and 4 for transcripts
+Set up parallel processing. Adjust the number of workers as needed. Default: 6 for subject downloads and 4 for transcripts.
+
+```{r}
 plan(multisession, workers = 4)
 ```
 
 # Import Data
 
 ```{r}
-businesses_cleaned <- read_rds(here("Data/businesses_cleaned.rds"))
+businesses_cleaned <- read_rds(here("Data/01_businesses_cleaned.rds"))
 ```
 
 # Download Subjects
+
+Download `SubjectBusiness` entries for each business, with automatic retries and exponential backoff on failure. Already downloaded files are skipped.
 
 ```{r}
 get_subjects <- function(bsn, retries = 5, wait = 3) {
@@ -72,11 +73,11 @@ get_subjects <- function(bsn, retries = 5, wait = 3) {
 }
 
 # Start parallel jobs
-# fut <- future_walk(
-#   businesses_cleaned$BusinessShortNumber,
-#   get_subjects,
-#   .progress = TRUE
-# )
+fut <- future_walk(
+  businesses_cleaned$BusinessShortNumber,
+  get_subjects,
+  .progress = TRUE
+)
 
 # WAIT UNTIL ALL JOBS ARE FINISHED
 # value(fut)
@@ -85,35 +86,22 @@ subjects <- map_dfr(
   list.files(here("Data/subjects"), full.names = TRUE),
   read_rds
 )
-write_rds(subjects, here("Data/subjects.rds"))
+write_rds(subjects, here("Data/02_subjects.rds"))
+```
 
-# businesses_cleaned |> distinct(BusinessShortNumber)
-# subjects |> distinct(BusinessShortNumber)
-# # some businesses have no entries in SubjectBusiness
-# # this is because some businesses have no discussion in the councils
+Some businesses have no entries in `SubjectBusiness`, indicating they were never debated in either council.
 
-# # show be which businesses are missing
-# missing_bsn <- setdiff(
-#   businesses_cleaned$BusinessShortNumber,
-#   subjects$BusinessShortNumber
-# )
-# paste(length(missing_bsn), "businesses have no entries in SubjectBusiness.")
-
-# # check whether businesses really have no entries in SubjectBusiness
-# get_data(
-#   table = "SubjectBusiness",
-#   BusinessShortNumber = missing_bsn$BusinessShortNumber[1],
-#   Language = "DE"
-# )
-
-# businesses_lost <- businesses_cleaned |> filter(BusinessShortNumber %in% missing_bsn)
-# businesses_lost |> count(BusinessType, BusinessTypeName)
-
-# # analyze businesses
-# business_names <- subjects |> distinct(BusinessShortNumber, Title)
+```{r}
+missing_bsn <- setdiff(
+  businesses_cleaned$BusinessShortNumber,
+  subjects$BusinessShortNumber
+)
+paste(length(missing_bsn), "businesses have no entries in SubjectBusiness.")
 ```
 
 # Download Transcripts
+
+Download transcript entries for each subject, again with retries and exponential backoff.
 
 ```{r}
 get_transcripts <- function(sbj, retries = 5, wait = 3) {
@@ -152,26 +140,80 @@ get_transcripts <- function(sbj, retries = 5, wait = 3) {
   return(FALSE)
 }
 
-# fut <- future_walk(
-#   subjects$IdSubject,
-#   get_transcripts,
-#   .progress = TRUE
-# )
+fut <- future_walk(
+  subjects$IdSubject,
+  get_transcripts,
+  .progress = TRUE
+)
 
+# WAIT UNTIL ALL JOBS ARE FINISHED
 # value(fut)
 
 transcripts <- map_dfr(
   list.files(here("Data/transcripts"), full.names = TRUE),
   read_rds
 )
-write_rds(transcripts, here("Data/transcripts.rds"))
+write_rds(transcripts, here("Data/02_transcripts.rds"))
+```
 
-# # check if all transcripts are there
-# subjects |> distinct(IdSubject)
-# transcripts |> distinct(IdSubject)
+# Inspect Transcripts
+
+All meetings belong to either the National Council, the Council of States, or the United Federal Assembly. There are no committee pre-sessions. Good.
+
+```{r}
+transcripts |> count(MeetingCouncilAbbreviation)
+```
+
+Check speaker details — which councils do they come from? I want only parliamentarians, other speakers (especially from the federal council) will be filtered out. 
+
+```{r}
+transcripts |> count(CouncilId, CouncilName)
+```
+
+Since the analysis centers around contributions from parliamentarians that can be attributed to a specific party (i.e. Parliamentary Group), entries without assigned parliamentary groups will be filtered out. These typically include speakers from the federal council, but also a few negligible contributions from parliamentarians without assigned groups (e.g. independents or technical remarks).
+
+```{r}
+transcripts |> count(ParlGroupName, CouncilName)
+```
+
+Check the distribution of speaker functions. Entries where no parliamentarian is assigned are typically moderations or technical remarks and will be filtered out.
+
+```{r}
+transcripts |> count(SpeakerFunction) |> arrange(n)
+```
+
+For demonstration, here are some transcripts without assigned speaker functions.
+
+```{r}
+transcripts |> filter(is.na(SpeakerFunction)) |> pull(Text) |> sample(10)
+```
+
+Check the language distribution of the transcripts. Italian transcripts make only about 1% of the data and will be removed from the analysis for practical reasons.
+
+```{r}
+transcripts |> count(LanguageOfText) |> mutate(share = n / sum(n)) |> arrange(n)
+```
+
+Check vote entries — these will be filtered out since they hold no substantive content.
+
+```{r}
+transcripts |> filter(!is.na(VoteBusinessNumber)) |> pull(Text) |> sample(10)
+```
+
+Check entries with `[VS]` tags — these are presiding remarks not relevant to content analysis and will be removed. As follows are some examples for demonstration.
+
+```{r}
+transcripts |>
+  filter(
+    str_detect(Text, "\\[VS]")
+  ) |> 
+  pull(Text) |> 
+  sample(10)
 ```
 
 # Clean Transcripts
+
+Filter transcripts to the relevant session range and remove entries that are not suitable for content analysis: Italian-language entries, Speakers outside National Council and Council of State (Especially Federal Council), vote records, unassigned speaker functions, and paragraphs with `[VS]` tags.
 
 ```{r}
 # sessions <- get_data(
@@ -180,51 +222,16 @@ write_rds(transcripts, here("Data/transcripts.rds"))
 #   Language = "DE"
 # )
 
-# # Gibt es Vorbesprechungen in Kommissionen?
-# transcripts |> count(CouncilId, CouncilName) # beziehen sich auf den Sprecher
-# transcripts |> count(MeetingCouncilAbbreviation)
-# # alle Meetings sind entweder Nationalrat, Ständerat oder Vereinigte Bundesversammlung
-
-# # check languages
-# transcripts |> count(LanguageOfText) |> arrange(n)
-# transcripts |> filter(is.na(LanguageOfText)) |> pull(Text) |> sample(10)
-# transcripts |> filter(!is.na(LanguageOfText)) |> pull(Text) |> sample(10)
-# # italienische Texte müssen sicher raus
-# # aus den Samples ist nicht erkennbar, warum es NAs gibt
-
-# todo: plot language distribution
-
-# # check speaker functions
-# transcripts |> count(SpeakerFunction) |> arrange(n)
-# transcripts |> filter(is.na(SpeakerFunction)) |> pull(Text) |> sample(10)
-# # wo kein Parlamentarier zugewiesen machen kann, ist es meist eine Moderation
-# # oder ein technischer Hinweis -> kann raus
-# transcripts |> filter(SpeakerFunction == "P-M") |> pull(Text) |> sample(10)
-# # bei P, VP, etc. bin ich mir nicht sicher ob relevant -> erstmal behalten
-
-# # check Votes
-# transcripts |> filter(!is.na(VoteBusinessNumber)) |> pull(Text) |> sample(10) # kann raus
-
-# # check VS tags
-# vorsitzender <- transcripts |>
-#   filter(
-#     str_detect(Text, "\\[VS]")
-#   )
-# # diese Transkript sind für die Analyse des Inhalts nicht von Interesse
-# # diese werden daher aus dem Datensatz entfernt
-
-# italienisch <- transcripts |>
-#   filter(LanguageOfText == "IT")
-# keine italienischen Texte, da nur ca. 1% der Texte
-
 transcripts_filtered <- transcripts |>
   filter(
-    IdSession >= 5002, # Frühjahrssession 2016
-    IdSession <= 5210, # Herbstsession 2025
-    LanguageOfText != "IT", # keine italienischen Texte
-    is.na(VoteBusinessNumber), # keine Abstimmungen
-    !is.na(SpeakerFunction), # keine Moderationen oder technische Hinweise
-    !str_detect(Text, "\\[VS]") # remove paragraphs with VS (Vorsitzender) tags
+    IdSession >= 5002, # Spring session 2016
+    IdSession <= 5210, # Autumn session 2025
+    LanguageOfText != "IT", # exclude Italian-language entries
+    CouncilId %in% c(1, 2), # keep only Speakers from the National Council and Council of States
+    !is.na(ParlGroupName), # exclude entries without assigned parliamentary groups
+    is.na(VoteBusinessNumber), # exclude vote records
+    !is.na(SpeakerFunction), # exclude moderation and technical remarks
+    !str_detect(Text, "\\[VS]") # exclude paragraphs with VS (Vorsitzende) tags
   )
 
 businesses_climate <- businesses_cleaned |>
@@ -242,8 +249,7 @@ transcripts_cleaned <- transcripts_filtered |>
   mutate(
     transcript_text = Text |>
       str_replace_all("\\[PAGE \\d+\\]", "") |> # remove pagination
-      str_replace_all("<[^>]+>", "") |> # remove HTML tags for italics and bold etc.
-      str_replace_all("\\[GZ]", "") |> # remove [GZ] tags (Grosse Zäsur)
+      str_replace_all("\\[GZ]", "") |> # remove [GZ] tags (major caesura)
       str_squish(),
     transcript_word_count = str_count(transcript_text),
     business_tag_climate = if_else(
@@ -253,7 +259,12 @@ transcripts_cleaned <- transcripts_filtered |>
     ),
     meeting_id = as.character(MeetingVerbalixOid),
     council_id = as.character(CouncilId),
-    canton_id = as.character(CantonId)
+    canton_id = as.character(CantonId),
+    meeting_date = as.Date(Start),
+    ParlGroupName = case_when(
+      ParlGroupAbbreviation %in% c("M-E", "BD") ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
+      .default = ParlGroupName
+    )
   ) |>
   select(
     !c(
@@ -266,25 +277,37 @@ transcripts_cleaned <- transcripts_filtered |>
     )
   )
 
-# session_statistics <- transcripts_filtered |>
-#   group_by(IdSession) |>
-#   summarise(
-#     number_of_meetings = n_distinct(MeetingVerbalixOid),
-#     number_of_protocols = n_distinct(ID),
-#     number_of_businesses = n_distinct(IdSubject)
-#   )
+write_rds(transcripts_cleaned, here("Data/02_transcripts_cleaned.rds"))
+```
 
-# meeting_statistics <- transcripts_filtered |>
-#   group_by(MeetingVerbalixOid) |>
-#   summarise(
-#     number_of_protocols = n_distinct(ID),
-#     number_of_businesses = n_distinct(IdSubject)
-#   )
+# Check Cleaned Transcripts
 
-# saveRDS(transcripts_filtered, "Data/transcripts_filtered.rds")
+Session statistics:
+
+```{r}
+transcripts_cleaned |>
+  group_by(IdSession) |>
+  summarise(
+    number_of_meetings = n_distinct(meeting_id),
+    number_of_transcripts = n_distinct(transcript_id),
+    number_of_businesses = n_distinct(IdSubject)
+  )
+```
+
+Meeting statistics:
+
+```{r}
+transcripts_cleaned |>
+  group_by(MeetingVerbalixOid) |>
+  summarise(
+    number_of_transcripts = n_distinct(transcript_id),
+    number_of_businesses = n_distinct(IdSubject)
+  )
 ```
 
 # Create Paragraphs
+
+Extract individual paragraphs from transcript texts using HTML `<p>` tags, then clean inline HTML markup and assign unique paragraph IDs.
 
 ```{r}
 paragraphs_raw <- transcripts_cleaned |>
@@ -293,21 +316,10 @@ paragraphs_raw <- transcripts_cleaned |>
   ) |>
   unnest(paragraph_text)
 
-# short_paragraphs <- transcripts_tokenized |>
-#   filter(nchar(paragraph) < 50)
-
-# italics <- transcripts_tokenized |>
-#   filter(str_detect(paragraph, "<i>")) # remove the italics tags
-
-# VS_tags <- transcripts_tokenized |>
-#   filter(str_detect(paragraph, "\\[VS]")) # remove those parapgraphs
-
-# GZ_tags <- transcripts_tokenized |>
-#   filter(str_detect(paragraph, "\\[GZ]")) # handelt sich um eine Zäsur (langer Unterbruch) -> tags entfernen
-
 paragraphs_cleaned <- paragraphs_raw |>
   group_by(transcript_id) |>
   mutate(
+    paragraph_text = str_replace_all(paragraph_text, "<[^>]+>", ""), # remove HTML tags for italics and bold etc.
     paragraph_id = paste0(transcript_id, "-", row_number())
   ) |>
   ungroup() |>
@@ -315,36 +327,41 @@ paragraphs_cleaned <- paragraphs_raw |>
     paragraph_word_count = str_count(paragraph_text, "\\S+")
   )
 
-write_rds(paragraphs_cleaned, here("Data/paragraphs_cleaned.rds"))
+write_rds(paragraphs_cleaned, here("Data/02_paragraphs_cleaned.rds"))
 ```
 
 # Visualize
 
-```{r}
-# transcripts_cleaned |> pull(paragraph) |> sample(10)
+Plot paragraph length distribution.
 
-# plot paragraph length distribution
+```{r}
 plot_word_count_distribution(
   data = paragraphs_cleaned,
   title = "Distribution of Paragraph Lengths in Complete Dataset",
-  output_path = "Outputs/paragraphs_cleaned_text_length_distribution.png"
+  output_path = "Outputs/02_paragraphs_cleaned_text_length_distribution.png"
 )
+```
 
-# plot language distribution
+Plot paragraph language distribution.
+
+```{r}
 plot_categorical_distribution(
   data = paragraphs_cleaned,
   group_col = "LanguageOfText",
   x_label = "Language of Paragraphs",
   title = "Distribution of Languages in Complete Dataset",
-  output_path = "Outputs/paragraphs_cleaned_language_distribution.png"
+  output_path = "Outputs/02_paragraphs_cleaned_language_distribution.png"
 )
+```
 
-# plot business tag distribution
+Plot business tag distribution.
+
+```{r}
 plot_categorical_distribution(
   data = paragraphs_cleaned,
   group_col = "business_tag_climate",
   x_label = "Energy, Transport or Environment Related Business",
   title = "Distribution of Business Tags in Complete Dataset",
-  output_path = "Outputs/paragraphs_cleaned_business_tags_distribution.png"
+  output_path = "Outputs/02_paragraphs_cleaned_business_tags_distribution.png"
 )
 ```
