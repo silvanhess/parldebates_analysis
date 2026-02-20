@@ -232,6 +232,7 @@ party_colors <- c(
 
 ## Data Preprocessing
 
+todo: shorten the labels (e.g. SP, Grüne, Mitte, GLP, FDP & SVP)
 
 ```{r}
 visualization_data <- paragraphs_classified_wide_final |>
@@ -379,8 +380,8 @@ p <- ggplot(session_climate_share, aes(x = session_median_date, y = share_climat
     y = "Share (%)"
   ) +
   theme_minimal()
-ggsave(here("Outputs/05_plot_timeseries_relative.png"))
-write_rds(p, here("Outputs/05_plot_timeseries_relative.rds"))
+ggsave(here("Outputs/05_plot_timeseries.png"))
+write_rds(p, here("Outputs/05_plot_timeseries.rds"))
 p
 ```
 
@@ -394,6 +395,8 @@ paragraphs_classified_wide_final |>
   print(n = "Inf")
 ```
 
+todo: die klimarelevanten Passagen zu den Geschäften anschauen & deren Anteil am Geschäft
+evt. spezieller Filter nötig oder Anpassung Threshold
 
 
 ## Climate Discourse Across Parties
@@ -425,7 +428,7 @@ p <- shares |>
   geom_vline(xintercept = 1, linetype = "dashed", color = "gray50")
 
 ggsave(here("Outputs/05_plot_climate_factor_per_party.png"))
-write_rds(p, here("Outputs/05_plot_climate_factor _per_party.rds"))
+write_rds(p, here("Outputs/05_plot_climate_factor_per_party.rds"))
 p
 ```
 
@@ -476,6 +479,7 @@ ggsave(here("Outputs/05_plot_climate_share_per_party.png"))
 write_rds(p, here("Outputs/05_plot_climate_share_per_party.rds"))
 p
 ```
+todo: add a third bar that shows share of words in all debates!
 
 ### Time Variable
 
