@@ -189,7 +189,7 @@ paragraphs_classified_wide_final <- paragraphs_classified_wide |>
     n_climate_paragraphs = sum(climate_paragraph),
     proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
     final_climate = case_when(
-      proportion_climate_paragraphs >= 0.1 ~ TRUE,
+      proportion_climate_paragraphs >= 0.1 & n_climate_paragraphs > 1 ~ TRUE,
       .default = FALSE
     )
   ) |>
@@ -362,6 +362,8 @@ p
 ```
 
 ### Time-Variable
+
+todo: Sondersessionen rausnehmen? Oder zumindest markieren? Weil die nicht mit regulären Sessions vergleichbar sind. Oder wir nehmen den Teil ganz raus weil nicht relevant.
 
 ```{r}
 session_climate_share <- visualization_data |>

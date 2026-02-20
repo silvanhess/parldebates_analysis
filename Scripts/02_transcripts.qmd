@@ -82,11 +82,15 @@ fut <- future_walk(
 # WAIT UNTIL ALL JOBS ARE FINISHED
 # value(fut)
 
-subjects <- map_dfr(
-  list.files(here("Data/subjects"), full.names = TRUE),
-  read_rds
-)
-write_rds(subjects, here("Data/02_subjects.rds"))
+if (!file.exists(here("Data/02_subjects.rds"))) {
+  subjects <- map_dfr(
+    list.files(here("Data/subjects"), full.names = TRUE),
+    read_rds
+  )
+  write_rds(subjects, here("Data/02_subjects.rds"))
+} else {
+  read_rds(here("Data/02_subjects.rds"))
+}
 ```
 
 Some businesses have no entries in `SubjectBusiness`, indicating they were never debated in either council.
@@ -149,11 +153,15 @@ fut <- future_walk(
 # WAIT UNTIL ALL JOBS ARE FINISHED
 # value(fut)
 
-transcripts <- map_dfr(
-  list.files(here("Data/transcripts"), full.names = TRUE),
-  read_rds
-)
-write_rds(transcripts, here("Data/02_transcripts.rds"))
+if (!file.exists(here("Data/02_transcripts.rds"))) {
+  transcripts <- map_dfr(
+    list.files(here("Data/transcripts"), full.names = TRUE),
+    read_rds
+  )
+  write_rds(transcripts, here("Data/02_transcripts.rds"))
+} else {
+  transcripts <- read_rds(here("Data/02_transcripts.rds"))
+}
 ```
 
 # Inspect Transcripts
@@ -216,11 +224,11 @@ transcripts |>
 Filter transcripts to the relevant session range and remove entries that are not suitable for content analysis: Italian-language entries, Speakers outside National Council and Council of State (Especially Federal Council), vote records, unassigned speaker functions, and paragraphs with `[VS]` tags.
 
 ```{r}
-# sessions <- get_data(
-#   "Session",
-#   StartDate = c(">2015-01-01"),
-#   Language = "DE"
-# )
+sessions <- get_data(
+  "Session",
+  StartDate = c(">2015-01-01"),
+  Language = "DE"
+)
 
 transcripts_filtered <- transcripts |>
   filter(
@@ -285,6 +293,7 @@ write_rds(transcripts_cleaned, here("Data/02_transcripts_cleaned.rds"))
 Session statistics:
 
 ```{r}
+# session_stats <-
 transcripts_cleaned |>
   group_by(IdSession) |>
   summarise(
