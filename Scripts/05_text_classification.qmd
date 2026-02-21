@@ -13,13 +13,19 @@ Import all necessary packages and functions.
 #| label: setup
 
 library(tidyverse)
-library(openxlsx)
+# library(openxlsx)
 library(tidytext)
 library(stopwords)
 library(here)
 library(zoo)
+library(dotenv)
+library(ellmer)
+library(furrr)
+library(future)
 source(here("Scripts/00_functions.R"))
+load_dot_env(here(".env"))
 ```
+
 
 # Import Data
 
@@ -34,10 +40,10 @@ subjects <-
   read_rds(here("Data/02_subjects.rds")) |> 
   select(IdSubject, BusinessShortNumber, Title)
 french_dictionary_curated <- 
-  read.xlsx(here("french_dictionary_curated.xlsx")) |>
+  read_csv(here("french_dictionary_curated.csv")) |>
   rename(keyword_original = keyword_french)
 german_dictionary_curated <- 
-  read.xlsx(here("german_dictionary_curated.xlsx")) |>
+  read_csv(here("german_dictionary_curated.csv")) |>
   rename(keyword_original = keyword_german)
 ```
 
@@ -123,7 +129,7 @@ paragraphs_classified <- words_cleaned |>
 write_rds(paragraphs_classified, here("Data/05_paragraphs_classified.rds"))
 ```
 
-The final climate label is assigned in three steps. First, businesses that contain at least one climate paragraph are identified as climate businesses.
+Do some preprocessing to prepare for final classification.
 
 ```{r}
 #| label: climate-businesses
@@ -154,46 +160,133 @@ paragraphs_subjects_cleaned <- paragraphs_subjects_long |>
 #   relationship = "many-to-one"
 # )
 
-climate_businesses <- 
-  # tibble(
-  # climate_business = 
-    paragraphs_subjects_long |>
-    filter(climate_paragraph == TRUE) |>
-    distinct(BusinessShortNumber) |>
-    pull(BusinessShortNumber)
-  # )
-```
-
-Second, all paragraphs belonging to a climate business are marked as climate-relevant.
-
-```{r}
-#| label: climate-paragraphs
+# climate_businesses <- 
+#   # tibble(
+#   # climate_business = 
+#     paragraphs_subjects_long |>
+#     filter(climate_paragraph == TRUE) |>
+#     distinct(BusinessShortNumber) |>
+#     pull(BusinessShortNumber)
+#   # )
 
 paragraphs_classified_wide <- paragraphs_subjects_cleaned |>
-  mutate(
-    climate = map_lgl(str_split(BusinessShortNumber, " \\| "), ~ any(.x %in% climate_businesses))
-  ) |>
+  # mutate(
+  #   climate = map_lgl(str_split(BusinessShortNumber, " \\| "), ~ any(.x %in% climate_businesses))
+  # ) |>
   distinct() |> 
-  rename(paragraph_text = paragraph_text.x)
+  rename(paragraph_text = paragraph_text.x) |> 
+  select(-paragraph_text.y)
 ```
 
-Third, a business is assigned a `final_climate` label if at least 10% of its paragraphs match the dictionary. This threshold ensures that only businesses with substantive climate content are included.
+Inspect the businesses according to their climate relevance.
+
+A business is assigned a `climate_temp` label if at least one paragraph and 5% of its paragraphs match the dictionary or the paragraph references the climate dictionary explicitly. This threshold ensures that only businesses with substantive climate content are included.
+
+```{r}
+business_classification <- paragraphs_classified_wide |> 
+  group_by(BusinessShortNumber, Title) |>
+  summarise(
+    n_paragraphs = n(),
+    n_climate_paragraphs = sum(climate_paragraph),
+    proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
+    climate_temp = case_when(n_climate_paragraphs >= 1 & proportion_climate_paragraphs >= 0.05 ~ TRUE,
+    .default = FALSE)
+  )
+```
+
+In a next step, an LLM will be used to check the business Titles of climate_temp businesses and assign the final `climate` label. This is necessary to exclude false positives, i.e. businesses that contain some climate keywords but are not actually about climate topics.
+
+```{r}
+#| label: llm-classification
+
+if (file.exists(here("Data/05_business_classification_final.rds"))) {
+  
+  business_classificatoin_final <- 
+    read_rds(here("Data/05_business_classification_final.rds"))
+  
+} else {
+  
+  bn_clim <- business_classification |> filter(climate_temp == TRUE)
+  
+  prompt <- paste(readLines(here("label_review.txt")), collapse = " ")
+  
+  process_text <- function(text, index) {
+    chat <- chat_openai(
+      model = "gpt-5-mini",
+      system_prompt = prompt
+    )
+  
+    result <- tryCatch(
+      {
+        chat$chat(text)
+      },
+      error = function(e) {
+        NA_character_
+      }
+    )
+  
+    return(result)
+  }
+  
+  rows_to_process <- seq_len(nrow(bn_clim))
+
+  # set up parallel processing for LLM calls
+  plan(multisession, workers = 4)
+
+  bn_clim_reviewed <- bn_clim |> 
+    mutate(
+      llm_review = future_map2_chr(
+        Title,
+        rows_to_process,
+        process_text,
+        .progress = TRUE,
+        .options = furrr_options(seed = TRUE)
+      )
+    )
+
+  # end parallel processing
+  plan(sequential)
+  
+  business_classification_final <- business_classification |> 
+    left_join(
+      bn_clim_reviewed |> select(BusinessShortNumber, llm_review),
+      by = join_by(BusinessShortNumber)
+    ) |> 
+    mutate(
+      final_climate = case_when(
+        climate_temp == TRUE & llm_review == "True Positive" ~ TRUE,
+        climate_temp == TRUE & llm_review == "False Positive" ~ FALSE,
+        .default = FALSE
+      )
+    ) |> 
+    select(-climate_temp, -llm_review)
+  
+  write_rds(business_classification_final, here("Data/05_business_classification_final.rds"))
+}
+```
 
 ```{r}
 #| label: final-climate
 
+# paragraphs_classified_wide_final <- paragraphs_classified_wide |>
+#   group_by(BusinessShortNumber) |>
+#   mutate(
+#     n_paragraphs = n(),
+#     n_climate_paragraphs = sum(climate_paragraph),
+#     proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
+#     final_climate = case_when(
+#       # (proportion_climate_paragraphs >= 0.1 & n_climate_paragraphs > 1) | climate_paragraph == TRUE ~ TRUE,
+#       proportion_climate_paragraphs >= 0. & n_climate_paragraphs > 1 ~ TRUE,
+#       .default = FALSE
+#     )
+#   ) |>
+#   ungroup()
+
 paragraphs_classified_wide_final <- paragraphs_classified_wide |>
-  group_by(BusinessShortNumber) |>
-  mutate(
-    n_paragraphs = n(),
-    n_climate_paragraphs = sum(climate_paragraph),
-    proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
-    final_climate = case_when(
-      proportion_climate_paragraphs >= 0.1 & n_climate_paragraphs > 1 ~ TRUE,
-      .default = FALSE
-    )
-  ) |>
-  ungroup()
+  left_join(
+    business_classification_final |> select(BusinessShortNumber, final_climate),
+    by = join_by(BusinessShortNumber)
+  )
 
 write_rds(
   paragraphs_classified_wide_final,
@@ -202,349 +295,61 @@ write_rds(
 
 The climate label is therefore assigned at the business level: if a parliamentary business is considered climate-related, all debates around it are treated as climate-related.
 
-# Visualize
+## Climate Business Analysis
 
-## Visualization Setup
-
-Define party display order and colour palette for all subsequent plots.
-
-```{r}
-#| label: viz-setup
-
-party_names_order <- c(
-  "Sozialdemokratische Fraktion",
-  "Grüne Fraktion",
-  "Die Mitte-Fraktion / CVP-& BD-Fraktion",
-  "Grünliberale Fraktion",
-  "FDP-Liberale Fraktion",
-  "Fraktion der Schweizerischen Volkspartei"
-)
-
-party_colors <- c(
-  "Sozialdemokratische Fraktion" = "#E4032E",
-  "Grüne Fraktion" = "#84B547",
-  "Die Mitte-Fraktion / CVP-& BD-Fraktion" = "#FF8C00",
-  "Grünliberale Fraktion" = "#650959ff",
-  "FDP-Liberale Fraktion" = "#0571C1",
-  "Fraktion der Schweizerischen Volkspartei" = "#00843D"
-)
-```
-
-## Data Preprocessing
-
-todo: shorten the labels (e.g. SP, Grüne, Mitte, GLP, FDP & SVP)
-
-```{r}
-visualization_data <- paragraphs_classified_wide_final |>
-  mutate(
-    ParlGroupName = factor(ParlGroupName, levels = rev(party_names_order))
-    ) |>
-  group_by(IdSession) |> 
-  mutate(
-    session_median_date = min(meeting_date) + as.numeric(max(meeting_date) - min(meeting_date)) / 2
-  ) |> 
-  ungroup()
-  
-```
-
-## Summary Statistics
-
-```{r}
-# Summary Statistics - Overall (time-fixed)
-counts <- visualization_data |>
-  group_by(ParlGroupName) |>
-  summarise(
-    wordcount_party = sum(paragraph_word_count),
-    wordcount_party_clim = sum(paragraph_word_count[final_climate == TRUE])
-  ) |>
-  ungroup() |>
-  mutate(
-    wordcount_parl = sum(wordcount_party),
-    word_count_clim = sum(wordcount_party_clim)
-  )
-
-shares <- counts |> 
-  mutate(
-    party_share_in_parl = wordcount_party / sum(wordcount_party) * 100,
-    party_share_in_clim = wordcount_party_clim / sum(wordcount_party_clim) * 100,
-    clim_share_in_party = wordcount_party_clim / wordcount_party * 100,
-    avg_clim_share_in_parl = sum(wordcount_party_clim) / sum(wordcount_party) * 100,
-    
-    # Hypothetical climate words if each party had equal total size
-    n_parties = n(),
-    hypothetical_party_size = sum(wordcount_party) / n_parties,
-    hypothetical_clim_words = hypothetical_party_size * (clim_share_in_party / 100),
-    
-    # Size-adjusted climate share (this will sum to 100%)
-    size_adjusted_clim_share = hypothetical_clim_words / sum(hypothetical_clim_words) * 100,
-    
-    # Expected climate words if party spoke at parliament average rate
-    expected_clim_words = wordcount_party * (avg_clim_share_in_parl / 100),
-    
-    # Ratio of actual to expected (>1 means above average, <1 below)
-    clim_intensity_ratio = wordcount_party_clim / expected_clim_words
-  )
-
-# Summary Statistics - By Session (time-variable)
-session_counts <- visualization_data |> 
-  group_by(IdSession, session_median_date, ParlGroupName) |>
-  summarise(
-    wordcount_party = sum(paragraph_word_count),
-    wordcount_party_clim = sum(paragraph_word_count[final_climate == TRUE]),
-    .groups = "drop"
-  ) |>
-  group_by(IdSession, session_median_date) |>
-  mutate(
-    session_wordcount = sum(wordcount_party),
-    session_wordcount_clim = sum(wordcount_party_clim)
-  ) |>
-  ungroup()
-
-session_shares <- session_counts |> 
-  mutate(
-    party_share_in_parl = wordcount_party / session_wordcount * 100,
-    party_share_in_clim = wordcount_party_clim / session_wordcount_clim * 100,
-    clim_share_in_party = wordcount_party_clim / wordcount_party * 100,
-    avg_clim_share_in_session = session_wordcount_clim / session_wordcount * 100,
-    
-    # Hypothetical climate words if each party had equal total size
-    n_parties = n_distinct(ParlGroupName),
-    hypothetical_party_size = session_wordcount / n_parties,
-    hypothetical_clim_words = hypothetical_party_size * (clim_share_in_party / 100),
-    
-    # Size-adjusted climate share
-    size_adjusted_clim_share = hypothetical_clim_words / sum(hypothetical_clim_words) * 100,
-    
-    # Expected climate words if party spoke at parliament average rate
-    expected_clim_words = wordcount_party * (avg_clim_share_in_session / 100),
-    
-    # Ratio of actual to expected
-    clim_intensity_ratio = wordcount_party_clim / expected_clim_words
-  )
-```
-
-
-## Proportion of Climate Discourse
-
-### Time-Fixed
-
-Share of climate-relevant vs. non-relevant paragraphs across the full dataset.
-
-```{r}
-p <- plot_categorical_distribution(
-  paragraphs_classified_wide_final,
-  group_col = "final_climate",
-  x_label = "Climate Relevant Paragraph",
-  title = "Distribution of Climate Relevant Paragraphs",
-  output_path = "Outputs/05_paragraphs_climate_distribution.png"
-)
-write_rds(p, here("Outputs/05_paragraphs_climate_distribution.rds"))
-p
-```
-
-Share of climate-relevant vs. non-relevant businesses.
-
-```{r}
-df_grouped <- paragraphs_classified_wide_final |>
-  distinct(BusinessShortNumber, final_climate)
-
-p <- plot_categorical_distribution(
-  df_grouped,
-  group_col = "final_climate",
-  x_label = "Climate Relevant Businesses",
-  y_label = "Percentage of Businesses",
-  label_suffix = "businesses",
-  title = "Distribution of Climate Relevant Businesses",
-  output_path = "Outputs/05_businesses_climate_distribution.png"
-)
-write_rds(p, here("Outputs/05_businesses_climate_distribution.rds"))
-p
-```
-
-### Time-Variable
-
-todo: Sondersessionen rausnehmen? Oder zumindest markieren? Weil die nicht mit regulären Sessions vergleichbar sind. Oder wir nehmen den Teil ganz raus weil nicht relevant.
-
-```{r}
-session_climate_share <- visualization_data |>
-  group_by(IdSession, session_median_date) |>
-  summarise(
-    share_climate = sum(paragraph_word_count[final_climate == TRUE]) / sum(paragraph_word_count) * 100,
-    .groups = "drop"
-  )
-
-p <- ggplot(session_climate_share, aes(x = session_median_date, y = share_climate)) +
-  geom_line(color = "steelblue", size = 1) +
-  geom_point(color = "steelblue", size = 2) +
-  labs(
-    title = "Share of Climate Related Debates",
-    x = "Session Date",
-    y = "Share (%)"
-  ) +
-  theme_minimal()
-ggsave(here("Outputs/05_plot_timeseries.png"))
-write_rds(p, here("Outputs/05_plot_timeseries.rds"))
-p
-```
-
-Eine Session sticht hinaus, Details wie folgt:
+Print the largest climate relevant businesses.
 
 ```{r}
 paragraphs_classified_wide_final |> 
-  filter(IdSession == 5116) |> 
-  distinct(Title, final_climate) |>
-  arrange(final_climate) |> 
-  print(n = "Inf")
+  filter(final_climate == TRUE) |>
+  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
+  arrange(desc(n_paragraphs)) |> 
+  slice_head(n = 20) |> 
+  knitr::kable()
 ```
 
-todo: die klimarelevanten Passagen zu den Geschäften anschauen & deren Anteil am Geschäft
-evt. spezieller Filter nötig oder Anpassung Threshold
-
-
-## Climate Discourse Across Parties
-
-
-### Time-Fixed
-
-First Question: How much of each party's speech time do the parties devote to climate change? The grey line shows the parliament average at `r shares$avg_clim_share_in_parl`. In white are the percentages of climate speech in comparison to their total speech time.
+Print the climate businesses around the median.
 
 ```{r}
-p <- shares |>
-  ggplot(aes(x = clim_intensity_ratio, y = ParlGroupName, fill = ParlGroupName)) +
-  geom_col() +
-  scale_fill_manual(values = party_colors) +
-  geom_text(aes(label = ifelse(clim_share_in_party > 3, 
-                                sprintf("%.1f%%", clim_share_in_party), 
-                                "")),
-            position = position_stack(vjust = 0.5),
-            color = "white",
-            fontface = "bold",
-            size = 3.5) +
-  labs(
-    title = "Contribution to Climate Debate per Party",
-    x = "Actual Climate Contribution Compared to Parliament Average",
-    y = NULL
-  ) +
-  theme_minimal() +
-  theme(legend.position = "none") +
-  geom_vline(xintercept = 1, linetype = "dashed", color = "gray50")
-
-ggsave(here("Outputs/05_plot_climate_factor_per_party.png"))
-write_rds(p, here("Outputs/05_plot_climate_factor_per_party.rds"))
-p
+paragraphs_classified_wide_final |> 
+  filter(final_climate == TRUE) |> 
+  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |> 
+  slice_min(abs(n_paragraphs - median(n_paragraphs)), n = 10) |> 
+  knitr::kable()
 ```
 
-Second Question: Which parties dominate the climate discourse? I answer this question by showing each parties contribution to the total climate discourse. The second bar shows how the climate discourse would like if each party were of equal size.
+Print the smallest climate businesses.
 
 ```{r}
-
-# Reshape data for two bars
-shares_long <- shares |>
-  select(ParlGroupName, size_adjusted_clim_share, party_share_in_clim) |>
-  pivot_longer(
-    cols = c(size_adjusted_clim_share, party_share_in_clim),
-    names_to = "measure",
-    values_to = "percentage"
-  ) |>
-  mutate(
-    measure = factor(measure, 
-                    levels = c("size_adjusted_clim_share", "party_share_in_clim"),
-                    labels = c("Size-Adjusted", "Actual"))
-  )
-
-p <- shares_long |>
-  ggplot(aes(x = percentage, y = measure, fill = ParlGroupName)) +
-  geom_col(position = "stack", width = 0.6) +
-  geom_text(aes(label = ifelse(percentage > 3, 
-                                sprintf("%.1f%%", percentage), 
-                                "")),
-            position = position_stack(vjust = 0.5),
-            color = "white",
-            fontface = "bold",
-            size = 3.5) +
-  scale_fill_manual(values = party_colors) +
-  labs(
-    title = "Climate Share of Parliamentary Debates per Party",
-    subtitle = "Size-Adjusted: If all parties had equal speaking time | Actual: Real distribution",
-    x = "Share of Words in Climate Debates (%)",
-    y = NULL,
-    fill = "Party"
-  ) +
-  theme_minimal() +
-  theme(
-    legend.position = "right",
-    panel.grid.major.y = element_blank(),
-    panel.grid.minor.y = element_blank()
-  )
-
-ggsave(here("Outputs/05_plot_climate_share_per_party.png"))
-write_rds(p, here("Outputs/05_plot_climate_share_per_party.rds"))
-p
+paragraphs_classified_wide_final |> 
+  filter(final_climate == TRUE) |>
+  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
+  arrange(desc(n_paragraphs)) |>  
+  slice_tail(n = 20) |> 
+  knitr::kable()
 ```
-todo: add a third bar that shows share of words in all debates!
 
-### Time Variable
-
-Share of climate-related speeches per parliamentary group over time (30-days rolling average).
-
-First plot:
-
-This means disregarding the total word count of each party. Just looking at the share of one party divided by the total word count of the climate debate in that session, without accounting for the fact that some parties speak more than others.
+Print the climate businesses just above the threshold of 10%
 
 ```{r}
-p <- session_shares |> 
-  ggplot(aes(x = session_median_date, y = party_share_in_clim, color = ParlGroupName)) +
-  geom_line(size = 1) +
-  geom_point(size = 1.5) +
-  scale_color_manual(values = party_colors) +
-  labs(
-    title = "Party Share in Climate Discourse",
-    x = "Session Date",
-    y = "Share (%)",
-    color = "Party Group"
-  ) +
-  theme_minimal() +
-  theme(
-    legend.position = "right",
-    panel.grid.major.y = element_blank(),
-    panel.grid.minor.y = element_blank()
-  )
-ggsave(here("Outputs/05_plot_climshare_timeseries.png"))
-write_rds(p, here("Outputs/05_plot_climshare_timeseries.rds"))
-p
+paragraphs_classified_wide_final |> 
+  filter(final_climate == TRUE) |>
+  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
+  arrange(proportion_climate_paragraphs) |>  
+  slice_head(n = 20) |> 
+  knitr::kable()
 ```
 
-Until around 2021, the mainstream and populist right dominated climate debates. After that point the distribution became more balanced across parties, with the Greens taking the largest share. Notably, the trajectories of the Greens and Green Liberals diverge sharply from 2020 onwards.
-
-The graph does not account for the relative size of parliamentary groups. The mainstream left and right tend to have larger shares than the Greens and Green Liberals, with the SVP holding the largest share in parliament overall (see [parlament.ch](https://www.parlament.ch/de/organe/fraktionen/)).
-
-Second Plot:
+Print non-climate businesses just below the threshold of 10%
 
 ```{r}
-p <- session_shares |>
-  ggplot(aes(x = session_median_date, y = clim_share_in_party, color = ParlGroupName)) +
-  geom_line(size = 1) +
-  geom_point(size = 1.5) +
-  scale_color_manual(values = party_colors) +
-  labs(
-    title = "Climate Share in Party's Speeches",
-    x = "Session Date",
-    y = "Share (%)",
-    color = "Party Group"
-  ) +
-  theme_minimal() +
-  theme(
-    legend.position = "right",
-    panel.grid.major.y = element_blank(),
-    panel.grid.minor.y = element_blank()
-  )
-ggsave(here("Outputs/05_plot_partyshare_timeseries.png"))
-write_rds(p, here("Outputs/05_plot_partyshare_timeseries.rds"))
-p
+paragraphs_classified_wide_final |> 
+  filter(final_climate == FALSE, proportion_climate_paragraphs < 0.1) |>
+  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
+  arrange(desc(proportion_climate_paragraphs)) |>  
+  slice_head(n = 20) |> 
+  knitr::kable()
 ```
-todo: überlegen ob nur reguläre Sessionen genommen werden sollen für die Vergleichbarkeit? Oder wir nehmen den Teil ganz raus weil nicht relevant.
-
-When we look at the contribution of a single party to the climate discourse, we see that the dominating factor is the presence of the climate in the parliament. When climate is the topic, every party contributes about the same with more variation happening towards the end of the 10-year period. This suggests that the differences in absolute share are largely driven by the overall presence of climate topics in the parliament, rather than by specific parties dominating the climate debate when it occurs.
 
 # Prepare Data for Topic Modeling
 
