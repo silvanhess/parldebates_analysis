@@ -17,8 +17,8 @@ The title does not plausibly relate to any of the abovementioned criteria.
 
 Apply a **plausibility standard**, not a certainty standard (Optimize Recall rather than Precision):
 - Ask: *"Could a reasonable person expect climate-related content by the abovementioned criteria to appear in this business?"*
-- If yes → **True Positive**
-- If no → **False Positive**
+- If yes, could be → **True Positive**
+- If no, very unlikely → **False Positive**
 
 # Outpot Format
 

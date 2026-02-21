@@ -173,12 +173,9 @@ paragraphs_classified_wide <- paragraphs_subjects_cleaned |>
   # mutate(
   #   climate = map_lgl(str_split(BusinessShortNumber, " \\| "), ~ any(.x %in% climate_businesses))
   # ) |>
-  distinct() |> 
   rename(paragraph_text = paragraph_text.x) |> 
   select(-paragraph_text.y)
 ```
-
-Inspect the businesses according to their climate relevance.
 
 A business is assigned a `climate_temp` label if at least 10% of its paragraphs match the dictionary or the paragraph references the climate dictionary explicitly. This threshold ensures that only businesses with substantive climate content are included.
 
@@ -202,7 +199,7 @@ In a next step, an LLM will be used to check the business Titles of climate_temp
 
 if (file.exists(here("Data/05_business_classification_final.rds"))) {
   
-  business_classificatoin_final <- 
+  business_classification_final <- 
     read_rds(here("Data/05_business_classification_final.rds"))
   
 } else {
@@ -255,14 +252,50 @@ if (file.exists(here("Data/05_business_classification_final.rds"))) {
         climate_temp == TRUE & llm_review == "False Positive" ~ FALSE,
         .default = FALSE
       )
-    ) |> 
-    select(-climate_temp, -llm_review)
+    )
   
   write_rds(business_classification_final, here("Data/05_business_classification_final.rds"))
 }
 ```
 
 ## Climate Business Analysis
+
+Plot some summary statistics about the climate businesses
+- Number of businesses in business_classification
+- Number of climate_temp in business_classification
+- Number of final_climate in business_classification_final
+
+```{r}
+summary_stats <- tibble(
+  category = c("Total Businesses", "Climate Temp", "Final Climate"),
+  count = c(
+    nrow(business_classification),
+    sum(business_classification$climate_temp),
+    sum(business_classification_final$final_climate)
+  )
+)
+
+ggplot(summary_stats, aes(x = category, y = count, fill = category)) +
+  geom_col() +
+  geom_text(aes(label = count), vjust = -0.5) +
+  theme_minimal() +
+  labs(title = "Summary of Business Classifications", x = "Category", y = "Count") +
+  theme(legend.position = "none")
+```
+
+Plot the distribution of the number of pargraphs for final_climate.
+
+```{r}
+df <- business_classification_final |> 
+  filter(final_climate == TRUE)
+
+  ggplot(df, aes(x = n_paragraphs)) +
+  geom_histogram() +
+  theme_minimal() +
+  labs(title = "Distribution of Number of Paragraphs for Final Climate Businesses", x = "Number of Paragraphs", y = "Count")
+```
+
+There are a few very large businesses that make up a large proportion of the climate discourse.
 
 Print the largest climate relevant businesses.
 
@@ -271,28 +304,28 @@ business_classification_final |>
   filter(final_climate == TRUE) |>
   distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
   arrange(desc(n_paragraphs)) |> 
-  slice_head(n = 20) |> 
+  slice_head(n = 10) |> 
   knitr::kable()
 ```
 
-Print the climate businesses around the median size of a climate business in the dataset.
+Print the largest non climate relevant businesses.
+
+```{r}
+business_classification_final |> 
+  filter(final_climate == FALSE) |>
+  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
+  arrange(desc(n_paragraphs)) |> 
+  slice_head(n = 10) |> 
+  knitr::kable()
+```
+
+Print the climate businesses around the mean size of a climate business in the dataset.
 
 ```{r}
 business_classification_final |> 
   filter(final_climate == TRUE) |> 
   distinct(Title, n_paragraphs, proportion_climate_paragraphs) |> 
-  slice_min(abs(n_paragraphs - median(n_paragraphs)), n = 10) |> 
-  knitr::kable()
-```
-
-Print the smallest climate businesses.
-
-```{r}
-business_classification_final |> 
-  filter(final_climate == TRUE) |>
-  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
-  arrange(desc(n_paragraphs)) |>  
-  slice_tail(n = 20) |> 
+  slice_min(abs(n_paragraphs - mean(n_paragraphs)), n = 10) |> 
   knitr::kable()
 ```
 
@@ -303,9 +336,11 @@ business_classification_final |>
   filter(final_climate == TRUE) |>
   distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
   arrange(proportion_climate_paragraphs) |>  
-  slice_head(n = 20) |> 
+  slice_head(n = 10) |> 
   knitr::kable()
 ```
+
+Few False Positives, but OK since Topic Modeling handels Outliers well.
 
 Print non-climate businesses just below the threshold.
 
@@ -314,9 +349,11 @@ business_classification_final |>
   filter(final_climate == FALSE, proportion_climate_paragraphs < 0.1) |>
   distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
   arrange(desc(proportion_climate_paragraphs)) |>  
-  slice_head(n = 20) |> 
+  slice_head(n = 10) |> 
   knitr::kable()
 ```
+
+Almost no False Negatives, which is good since we want to capture as much of the climate discourse as possible.
 
 # Paragraph-Level Climate Classification
 
