@@ -180,7 +180,7 @@ paragraphs_classified_wide <- paragraphs_subjects_cleaned |>
 
 Inspect the businesses according to their climate relevance.
 
-A business is assigned a `climate_temp` label if at least one paragraph and 5% of its paragraphs match the dictionary or the paragraph references the climate dictionary explicitly. This threshold ensures that only businesses with substantive climate content are included.
+A business is assigned a `climate_temp` label if at least 10% of its paragraphs match the dictionary or the paragraph references the climate dictionary explicitly. This threshold ensures that only businesses with substantive climate content are included.
 
 ```{r}
 business_classification <- paragraphs_classified_wide |> 
@@ -189,8 +189,9 @@ business_classification <- paragraphs_classified_wide |>
     n_paragraphs = n(),
     n_climate_paragraphs = sum(climate_paragraph),
     proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
-    climate_temp = case_when(n_climate_paragraphs >= 1 & proportion_climate_paragraphs >= 0.05 ~ TRUE,
-    .default = FALSE)
+    climate_temp = case_when(proportion_climate_paragraphs >= 0.1 ~ TRUE,
+    .default = FALSE),
+    .groups = "drop"
   )
 ```
 
@@ -228,24 +229,20 @@ if (file.exists(here("Data/05_business_classification_final.rds"))) {
     return(result)
   }
   
-  rows_to_process <- seq_len(nrow(bn_clim))
-
-  # set up parallel processing for LLM calls
   plan(multisession, workers = 4)
 
-  bn_clim_reviewed <- bn_clim |> 
-    mutate(
-      llm_review = future_map2_chr(
-        Title,
-        rows_to_process,
-        process_text,
-        .progress = TRUE,
-        .options = furrr_options(seed = TRUE)
-      )
-    )
+  reviews <- future_map2_chr(
+    bn_clim$Title,
+    seq_len(nrow(bn_clim)),
+    process_text,
+    .progress = TRUE,
+    .options = furrr_options(seed = TRUE)
+  )
 
-  # end parallel processing
   plan(sequential)
+
+  bn_clim_reviewed <- bn_clim |>
+    mutate(llm_review = reviews)
   
   business_classification_final <- business_classification |> 
     left_join(
@@ -265,22 +262,68 @@ if (file.exists(here("Data/05_business_classification_final.rds"))) {
 }
 ```
 
+## Climate Business Analysis
+
+Print the largest climate relevant businesses.
+
+```{r}
+business_classification_final |> 
+  filter(final_climate == TRUE) |>
+  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
+  arrange(desc(n_paragraphs)) |> 
+  slice_head(n = 20) |> 
+  knitr::kable()
+```
+
+Print the climate businesses around the median size of a climate business in the dataset.
+
+```{r}
+business_classification_final |> 
+  filter(final_climate == TRUE) |> 
+  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |> 
+  slice_min(abs(n_paragraphs - median(n_paragraphs)), n = 10) |> 
+  knitr::kable()
+```
+
+Print the smallest climate businesses.
+
+```{r}
+business_classification_final |> 
+  filter(final_climate == TRUE) |>
+  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
+  arrange(desc(n_paragraphs)) |>  
+  slice_tail(n = 20) |> 
+  knitr::kable()
+```
+
+Print the climate businesses just above the threshold.
+
+```{r}
+business_classification_final |> 
+  filter(final_climate == TRUE) |>
+  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
+  arrange(proportion_climate_paragraphs) |>  
+  slice_head(n = 20) |> 
+  knitr::kable()
+```
+
+Print non-climate businesses just below the threshold.
+
+```{r}
+business_classification_final |> 
+  filter(final_climate == FALSE, proportion_climate_paragraphs < 0.1) |>
+  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
+  arrange(desc(proportion_climate_paragraphs)) |>  
+  slice_head(n = 20) |> 
+  knitr::kable()
+```
+
+# Paragraph-Level Climate Classification
+
+Finally, the final climate label is assigned to the paragraphs table.
+
 ```{r}
 #| label: final-climate
-
-# paragraphs_classified_wide_final <- paragraphs_classified_wide |>
-#   group_by(BusinessShortNumber) |>
-#   mutate(
-#     n_paragraphs = n(),
-#     n_climate_paragraphs = sum(climate_paragraph),
-#     proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
-#     final_climate = case_when(
-#       # (proportion_climate_paragraphs >= 0.1 & n_climate_paragraphs > 1) | climate_paragraph == TRUE ~ TRUE,
-#       proportion_climate_paragraphs >= 0. & n_climate_paragraphs > 1 ~ TRUE,
-#       .default = FALSE
-#     )
-#   ) |>
-#   ungroup()
 
 paragraphs_classified_wide_final <- paragraphs_classified_wide |>
   left_join(
@@ -291,64 +334,6 @@ paragraphs_classified_wide_final <- paragraphs_classified_wide |>
 write_rds(
   paragraphs_classified_wide_final,
   here("Data/05_paragraphs_classified_wide_final.rds"))
-```
-
-The climate label is therefore assigned at the business level: if a parliamentary business is considered climate-related, all debates around it are treated as climate-related.
-
-## Climate Business Analysis
-
-Print the largest climate relevant businesses.
-
-```{r}
-paragraphs_classified_wide_final |> 
-  filter(final_climate == TRUE) |>
-  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
-  arrange(desc(n_paragraphs)) |> 
-  slice_head(n = 20) |> 
-  knitr::kable()
-```
-
-Print the climate businesses around the median.
-
-```{r}
-paragraphs_classified_wide_final |> 
-  filter(final_climate == TRUE) |> 
-  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |> 
-  slice_min(abs(n_paragraphs - median(n_paragraphs)), n = 10) |> 
-  knitr::kable()
-```
-
-Print the smallest climate businesses.
-
-```{r}
-paragraphs_classified_wide_final |> 
-  filter(final_climate == TRUE) |>
-  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
-  arrange(desc(n_paragraphs)) |>  
-  slice_tail(n = 20) |> 
-  knitr::kable()
-```
-
-Print the climate businesses just above the threshold of 10%
-
-```{r}
-paragraphs_classified_wide_final |> 
-  filter(final_climate == TRUE) |>
-  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
-  arrange(proportion_climate_paragraphs) |>  
-  slice_head(n = 20) |> 
-  knitr::kable()
-```
-
-Print non-climate businesses just below the threshold of 10%
-
-```{r}
-paragraphs_classified_wide_final |> 
-  filter(final_climate == FALSE, proportion_climate_paragraphs < 0.1) |>
-  distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
-  arrange(desc(proportion_climate_paragraphs)) |>  
-  slice_head(n = 20) |> 
-  knitr::kable()
 ```
 
 # Prepare Data for Topic Modeling

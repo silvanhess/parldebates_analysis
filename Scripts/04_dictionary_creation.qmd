@@ -21,12 +21,6 @@ source(here("Scripts/00_functions.R"))
 load_dot_env(here(".env"))
 ```
 
-Set up parallel processing. Adjust the number of workers based on API rate limits and system capacity.
-
-```{r}
-plan(multisession, workers = 4)
-```
-
 # Import Data
 
 ```{r}
@@ -160,7 +154,10 @@ if (file.exists(here("Data/04_paragraphs_keywords.rds"))) {
   rows_to_process <- seq_len(nrow(labeled_data_climate))
   # cat("Total rows to process:", length(rows_to_process), "\n")
   # cat("Using parallel processing with", future::nbrOfWorkers(), "workers\n")
-  
+
+  # start parallel processing
+  plan(multisession, workers = 4)
+
   keywords_vec <- future_map2_chr(
     labeled_data_climate$paragraph_text,
     rows_to_process,
@@ -168,6 +165,9 @@ if (file.exists(here("Data/04_paragraphs_keywords.rds"))) {
     .progress = TRUE,
     .options = furrr_options(seed = TRUE)
   )
+
+  # end parallel processing
+  plan(sequential)
   
   paragraphs_keywords <- tibble(
     paragraph_id = labeled_data_climate$paragraph_id,
@@ -177,10 +177,7 @@ if (file.exists(here("Data/04_paragraphs_keywords.rds"))) {
   )
   
   write_rds(paragraphs_keywords, here("Data/04_paragraphs_keywords.rds"))
-
 }
-
-plan(sequential)
 ```
 
 # Dictionary Preparation
