@@ -193,7 +193,7 @@ p
 
 ### Time-Fixed
 
-First Question: How much of each party's speech time do the parties devote to climate change? The grey line shows the parliament average at `r shares$avg_clim_share_in_parl`. In white are the percentages of climate speech in comparison to their total speech time.
+First Question: How much of each party's speech time do the parties devote to climate change? The grey line shows the parliament average at `r unique(shares$avg_clim_share_in_parl)`. In white are the percentages of climate speech in comparison to their total speech time.
 
 ```{r}
 p <- shares |>

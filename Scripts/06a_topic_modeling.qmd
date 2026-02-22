@@ -65,7 +65,7 @@ print(f"Output directory: {output_dir}")
 Read the preprocessed transcripts.
 
 ```{python}
-df = pd.read_csv(data_dir / '06_transcripts_climate_for_topic_modeling.csv')
+df = pd.read_csv(data_dir / '05_transcripts_climate_for_topic_modeling.csv')
 text_column = 'transcript_text'
 documents = df[text_column].tolist()
 

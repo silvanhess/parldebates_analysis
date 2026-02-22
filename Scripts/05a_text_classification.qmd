@@ -132,8 +132,6 @@ write_rds(paragraphs_classified, here("Data/05_paragraphs_classified.rds"))
 Do some preprocessing to prepare for final classification.
 
 ```{r}
-#| label: climate-businesses
-
 # n_distinct(subjects$IdSubject)
 
 paragraphs_subjects_long <- left_join(
@@ -258,7 +256,24 @@ if (file.exists(here("Data/05_business_classification_final.rds"))) {
 }
 ```
 
-## Climate Business Analysis
+## Transcript-Level Climate Classification
+
+As an alternative to the business-level classification, a transcript is classified as climate-relevant if it contains at least one paragraph that matches the dictionary. This captures a wider variety of climate-relevant language, but makes it harder to identify specific climate-related topics in the topic modeling step, since many transcripts will contain only a small proportion of climate-relevant content.
+
+```{r}
+transcript_classification <- paragraphs_classified_wide |> 
+  group_by(transcript_id) |>
+  summarise(
+    n_paragraphs = n(),
+    n_climate_paragraphs = sum(climate_paragraph),
+    proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
+    climate_transcript = case_when(n_climate_paragraphs > 0 ~ TRUE,
+    .default = FALSE),
+    .groups = "drop"
+  )
+```
+
+# Climate Business Analysis
 
 Plot some summary statistics about the climate businesses
 - Number of businesses in business_classification
@@ -296,20 +311,6 @@ df <- business_classification_final |>
 ```
 
 There are a few very large businesses that make up a large proportion of the climate discourse.
-
-Plot the distribution of the proportion of climate paragraphs for final_climate.
-
-```{r}
-p <- plot_categorical_distribution(
-  paragraphs_classified_wide_final,
-  group_col = "final_climate",
-  x_label = "Climate Relevant Paragraph",
-  title = "Distribution of Climate Relevant Paragraphs",
-  output_path = "Outputs/05_paragraphs_climate_distribution.png"
-)
-write_rds(p, here("Outputs/05_paragraphs_climate_distribution.rds"))
-p
-```
 
 Print the largest climate relevant businesses.
 
@@ -380,12 +381,36 @@ paragraphs_classified_wide_final <- paragraphs_classified_wide |>
   left_join(
     business_classification_final |> select(BusinessShortNumber, final_climate),
     by = join_by(BusinessShortNumber)
-  )
+  ) #|> 
+  # left_join(
+  #   transcript_classification |> select(transcript_id, climate_transcript),
+  #   by = join_by(transcript_id)
+  # ) |> 
+  # mutate(
+  #   final_climate = case_when(
+  #     final_climate == TRUE | climate_transcript == TRUE ~ TRUE,
+  #     .default = FALSE)
+  # )
 
 write_rds(
   paragraphs_classified_wide_final,
   here("Data/05_paragraphs_classified_wide_final.rds"))
 ```
+
+Plot the distribution of the proportion of climate paragraphs for final_climate.
+
+```{r}
+p <- plot_categorical_distribution(
+  paragraphs_classified_wide_final,
+  group_col = "final_climate",
+  x_label = "Climate Relevant Paragraph",
+  title = "Distribution of Climate Relevant Paragraphs",
+  output_path = "Outputs/05_paragraphs_climate_distribution.png"
+)
+write_rds(p, here("Outputs/05_paragraphs_climate_distribution.rds"))
+p
+```
+
 
 # Prepare Data for Topic Modeling
 
@@ -402,7 +427,7 @@ transcripts_climate_summary <-
     .groups = "drop"
   ) |>
   filter(transcript_word_length >= 50)
-
+  
 write_csv(
   transcripts_climate_summary,
   here("Data/05_transcripts_climate_for_topic_modeling.csv")
