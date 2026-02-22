@@ -297,6 +297,20 @@ df <- business_classification_final |>
 
 There are a few very large businesses that make up a large proportion of the climate discourse.
 
+Plot the distribution of the proportion of climate paragraphs for final_climate.
+
+```{r}
+p <- plot_categorical_distribution(
+  paragraphs_classified_wide_final,
+  group_col = "final_climate",
+  x_label = "Climate Relevant Paragraph",
+  title = "Distribution of Climate Relevant Paragraphs",
+  output_path = "Outputs/05_paragraphs_climate_distribution.png"
+)
+write_rds(p, here("Outputs/05_paragraphs_climate_distribution.rds"))
+p
+```
+
 Print the largest climate relevant businesses.
 
 ```{r}
@@ -340,7 +354,7 @@ business_classification_final |>
   knitr::kable()
 ```
 
-Few False Positives, but OK since Topic Modeling handels Outliers well.
+Few False Positives, but OK since Topic Modeling handels Outliers well. Also, very small businesses that won't have much influence on the overall topic modeling results.
 
 Print non-climate businesses just below the threshold.
 
@@ -353,7 +367,7 @@ business_classification_final |>
   knitr::kable()
 ```
 
-Almost no False Negatives, which is good since we want to capture as much of the climate discourse as possible.
+Some medium and large businesses below the threshold with some climate relevanc, but not enough to be classified as climate relevant. This weakness is acknowlegedged, but the threshold is necessary to ensure that the final climate classification is meaningful and not diluted by businesses with only marginal climate content.
 
 # Paragraph-Level Climate Classification
 
