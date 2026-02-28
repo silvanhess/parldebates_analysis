@@ -39,11 +39,11 @@ Configure project paths. Adjust based on notebook location.
 ```{python}
 # Option 1: Notebook in project root
 # use for local development in VSCode or JupyterLab
-# project_root = Path.cwd()
+project_root = Path.cwd()
 
 # Option 2: Notebook in subdirectory (e.g., notebooks/)
 # use for rendering with Quarto
-project_root = Path.cwd().parent
+# project_root = Path.cwd().parent
 
 # Option 3: Manually specify path
 # project_root = Path('/path/to/your/project')
@@ -130,8 +130,10 @@ umap_model = UMAP(
 
 # HDBSCAN: Cluster documents into topics
 hdbscan_model = hdbscan.HDBSCAN(
-    min_cluster_size=50,
-    min_samples=5,
+    min_cluster_size=25,
+    # min_samples=10,
+    cluster_selection_epsilon=0.0,
+    # max_cluster_size=500,
     metric='euclidean',
     cluster_selection_method='eom',
     prediction_data=True
@@ -245,8 +247,9 @@ print("\nTopic distribution:")
 print(df['topic'].value_counts())
 
 topic_info = topic_model.get_topic_info()
+topic_info_excl_outlier = topic_info[topic_info['Topic'] != -1]
 print("\nTopic Information:")
-print(topic_info)
+print(topic_info_excl_outlier)
 
 # Save results
 df.to_csv(data_dir / '06_documents_with_topics.csv', index=False)
