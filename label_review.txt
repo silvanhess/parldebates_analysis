@@ -11,7 +11,8 @@ The title plausibly relates to
 - Any policy or action that has direct climate change mitigation or adaptation implications.
 
 **False Positive**
-The title does not plausibly relate to any of the abovementioned criteria.
+The title does not plausibly relate to any of the abovementioned criteria. 
+Mark as false positive, if the business title implies that it is concerning nuclear weapons instead of nuclear energy (everything army or war-related)
 
 # Decision Rules
 

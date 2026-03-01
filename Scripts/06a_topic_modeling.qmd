@@ -37,17 +37,7 @@ load_dotenv()
 Configure project paths. Adjust based on notebook location.
 
 ```{python}
-# Option 1: Notebook in project root
-# use for local development in VSCode or JupyterLab
-project_root = Path.cwd()
-
-# Option 2: Notebook in subdirectory (e.g., notebooks/)
-# use for rendering with Quarto
-# project_root = Path.cwd().parent
-
-# Option 3: Manually specify path
-# project_root = Path('/path/to/your/project')
-
+project_root = Path.cwd().parent if "Scripts" in Path.cwd().parts else Path.cwd()
 print(f"Project root: {project_root}")
 
 data_dir = project_root / 'Data'
@@ -130,8 +120,8 @@ umap_model = UMAP(
 
 # HDBSCAN: Cluster documents into topics
 hdbscan_model = hdbscan.HDBSCAN(
-    min_cluster_size=25,
-    # min_samples=10,
+    min_cluster_size=30,
+    # min_samples=15,
     cluster_selection_epsilon=0.0,
     # max_cluster_size=500,
     metric='euclidean',

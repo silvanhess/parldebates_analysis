@@ -304,10 +304,14 @@ Plot the distribution of the number of pargraphs for final_climate.
 df <- business_classification_final |> 
   filter(final_climate == TRUE)
 
-  ggplot(df, aes(x = n_paragraphs)) +
-  geom_histogram() +
-  theme_minimal() +
-  labs(title = "Distribution of Number of Paragraphs for Final Climate Businesses", x = "Number of Paragraphs", y = "Count")
+ggplot(df, aes(x = n_paragraphs)) +
+geom_histogram() +
+theme_minimal() +
+labs(
+  title = "Distribution of Number of Paragraphs for Final Climate Businesses", 
+  x = "Number of Paragraphs", 
+  y = "Count"
+)
 ```
 
 There are a few very large businesses that make up a large proportion of the climate discourse.
