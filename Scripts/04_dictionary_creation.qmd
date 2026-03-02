@@ -30,7 +30,7 @@ paragraphs_cleaned <- read_rds(here("Data/02_paragraphs_cleaned.rds"))
 
 # Process Labeled Data
 
-Join back the original paragraph text from `paragraphs_cleaned`, since it was omitted from the initial export. Convert the sentiment labels to a binary `climate` variable and remove annotation metadata columns.
+Join back the original paragraph text from `paragraphs_cleaned`, since the labeled dataset has only the translated paragraphs. Convert the sentiment labels to a binary `climate` variable and remove annotation metadata columns.
 
 ```{r}
 labeled_dataset_cleaned <-
@@ -232,7 +232,8 @@ french_dictionary$keyword_english <- map_chr(
 )
 
 # Export for manual curation
-# After reviewing, save the cleaned versions as *_curated.xlsx
 write.xlsx(german_dictionary, here("Data/04_german_dictionary.xlsx"))
 write.xlsx(french_dictionary, here("Data/04_french_dictionary.xlsx"))
+
+# After reviewing, save the cleaned versions as *_curated.csv
 ```

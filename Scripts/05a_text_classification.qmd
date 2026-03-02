@@ -142,8 +142,6 @@ paragraphs_subjects_long <- left_join(
 ) |> 
   select(-IdSubject)
 
-# paragraphs_subjects_long |> select(-BusinessShortNumber, -Title) |> distinct()
-
 paragraphs_subjects_cleaned <- paragraphs_subjects_long |> 
   group_by(across(c(-BusinessShortNumber, -Title))) |> 
   summarise(
@@ -151,26 +149,7 @@ paragraphs_subjects_cleaned <- paragraphs_subjects_long |>
     Title = paste(Title, collapse = " | ")
   )
 
-# paragraphs_subjects_businesses <- left_join(
-#   paragraphs_subjects,
-#   businesses_cleaned,
-#   by = join_by(BusinessShortNumber),
-#   relationship = "many-to-one"
-# )
-
-# climate_businesses <- 
-#   # tibble(
-#   # climate_business = 
-#     paragraphs_subjects_long |>
-#     filter(climate_paragraph == TRUE) |>
-#     distinct(BusinessShortNumber) |>
-#     pull(BusinessShortNumber)
-#   # )
-
 paragraphs_classified_wide <- paragraphs_subjects_cleaned |>
-  # mutate(
-  #   climate = map_lgl(str_split(BusinessShortNumber, " \\| "), ~ any(.x %in% climate_businesses))
-  # ) |>
   rename(paragraph_text = paragraph_text.x) |> 
   select(-paragraph_text.y)
 ```
@@ -385,16 +364,7 @@ paragraphs_classified_wide_final <- paragraphs_classified_wide |>
   left_join(
     business_classification_final |> select(BusinessShortNumber, final_climate),
     by = join_by(BusinessShortNumber)
-  ) #|> 
-  # left_join(
-  #   transcript_classification |> select(transcript_id, climate_transcript),
-  #   by = join_by(transcript_id)
-  # ) |> 
-  # mutate(
-  #   final_climate = case_when(
-  #     final_climate == TRUE | climate_transcript == TRUE ~ TRUE,
-  #     .default = FALSE)
-  # )
+  )
 
 write_rds(
   paragraphs_classified_wide_final,

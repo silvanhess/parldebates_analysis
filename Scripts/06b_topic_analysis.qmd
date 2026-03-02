@@ -41,6 +41,7 @@ topic_info <- read_csv(here("Data/06_topic_info.csv")) |>
     # topic = sprintf("%02d", as.numeric(topic)),
     topic_id = row_number() - 1, 
     OpenAI = str_remove_all(OpenAI, "\\[|\\]|'"),
+    OpenAI = ifelse(topic_id == 0, "Outliers", OpenAI),
     KeyBERT = str_remove_all(KeyBERT, "\\[|\\]|'"),
     MMR = str_remove_all(MMR, "\\[|\\]|'")
   ) |> 
@@ -49,13 +50,7 @@ topic_info <- read_csv(here("Data/06_topic_info.csv")) |>
 write_rds(topic_info, here("Data/06_r_topic_info.rds"))  
 
 paragraphs_climate <- read_rds(here("Data/05_paragraphs_classified_wide_final.rds")) |>
-  filter(final_climate == TRUE) #|>
-  # mutate(
-  #   ParlGroupName = case_when(
-  #     ParlGroupAbbreviation %in% c("M-E", "BD") ~ "Die Mitte-Fraktion / CVP-& BD-Fraktion",
-  #     .default = ParlGroupName
-  #   )
-  # )
+  filter(final_climate == TRUE)
 ```
 
 # Visualization Setup
@@ -135,13 +130,16 @@ topic_overview <-
   paragraphs_topics_wide |> 
   # filter(topic != "-1") |>
   group_by(topic_id, OpenAI) |> 
-  summarise(count = n_distinct(transcript_id), .groups = "drop") |> 
-  arrange(topic_id) |> 
-  mutate(OpenAI = case_when(topic_id == 0 ~ "Outliers", .default = OpenAI))
+  summarise(
+    count = n_distinct(transcript_id),
+    .groups = "drop"
+  ) |> 
+  mutate(pct_total = round(count / sum(count) * 100, 1)) |> 
+  arrange(topic_id)
 
 write_rds(topic_overview, here("Outputs/06_tbl_topic_overview.rds"))
 topic_overview |> 
-  kable(col.names = c("ID", "LLM Name", "Count"))
+  kable(col.names = c("ID", "LLM Name", "Count", "%"))
 ```
 
 Display KeyBERT and MMR representations for each topic.
@@ -157,31 +155,31 @@ representation_overview |>
 ```{r}
 #| label: topic-distribution
 
-# df_topic_distribution <- paragraphs_topics_wide |>
-#   group_by(topic) |>
-#   summarise(total_words = sum(paragraph_word_count)) |>
-#   mutate(
-#     pct_total = total_words / sum(total_words) * 100
-#   )
+df_topic_distribution <- paragraphs_topics_wide |>
+  group_by(topic_id) |>
+  summarise(total_words = sum(paragraph_word_count)) |>
+  mutate(
+    pct_total = total_words / sum(total_words) * 100
+  )
 
-# p <- ggplot(df_topic_distribution, aes(x = topic, y = pct_total)) +
-#   geom_col(fill = "steelblue") +
-#   geom_text(
-#     aes(label = paste0(round(pct_total, 1), "%")),
-#     vjust = -0.5,
-#     size = 3
-#   ) +
-#   # coord_flip() +
-#   labs(
-#     x = "Topic",
-#     y = "Percentage of Total Words",
-#     title = "Distribution of Words across Topics"
-#   ) +
-#   theme_minimal()
+p <- ggplot(df_topic_distribution, aes(x = topic_id, y = pct_total)) +
+  geom_col(fill = "steelblue") +
+  geom_text(
+    aes(label = paste0(round(pct_total, 1), "%")),
+    vjust = -0.5,
+    size = 3
+  ) +
+  # coord_flip() +
+  labs(
+    x = "Topic",
+    y = "Percentage of Total Words",
+    title = "Distribution of Words across Topics"
+  ) +
+  theme_minimal()
 
-# ggsave(here("Outputs/06_plot_topic_distribution.png"))
-# write_rds(p, here("Outputs/06_plot_topic_distribution.rds"))
-# p
+ggsave(here("Outputs/06_plot_topic_distribution.png"))
+write_rds(p, here("Outputs/06_plot_topic_distribution.rds"))
+p
 ```
 
 ## Analysis of Topic Representation
@@ -243,14 +241,14 @@ Which climate keywords are most prevalent in each topic?
 
 What are the most representative documents for each topic?
 
-European Court of Human Rights:
 
 ```{r}
 documents_with_topics |>
-  filter(topic_id == 3) |>
+  group_by(topic_id) |> 
   arrange(desc(topic_probability)) |>
   slice_sample(n = 5) |> 
-  pull(transcript_text)
+  select(topic_id, transcript_text) |> 
+  kable()
 ```
 
 ## Party Distribution per Topic
@@ -313,6 +311,13 @@ x/y = over/under emphasis of topic by party compared to overall parliamentary pr
 #| label: heatmap-party-topic
 
 counts <- paragraphs_topics_wide |>
+  # topic 6 and 7 can be joined into one topic, as they are very similar and both have low representation
+  mutate(
+    topic_id = case_when(
+      topic_id %in% c(6,7) ~ "6",
+      .default = as.character(topic_id)
+    )
+  ) |>
   group_by(party_abb, topic_id) |>
   summarise(
     wordcount_party_topic = sum(paragraph_word_count),
@@ -359,7 +364,7 @@ shares_long <- shares |>
   mutate(
     topic_id = str_remove(topic_id, "party_share_in_topic"),
     diff_from_parl = party_share_in_topic - party_share_in_parl,
-    topic_id = factor(as.numeric(topic_id), levels = 13:0),
+    topic_id = factor(as.numeric(topic_id), levels = rev(sort(unique(as.numeric(topic_id))))),
     party_abb = fct_rev(factor(party_abb))
   )
 
@@ -369,7 +374,7 @@ p <- ggplot(shares_long, aes(x = party_abb, y = topic_id, fill = diff_from_parl)
   scale_fill_gradient2(
     low = "blue", mid = "white", high = "red",
     midpoint = 0,
-    name = "Deviation from\nparl. share (pp)"
+    name = "Deviation from\nparl. share (%)"
   ) +
   labs(
     x = "Party",
@@ -433,8 +438,6 @@ for (i in 1:7) {
 }
 
 ```
-
-
 
 # Topic Trends Over Time
 

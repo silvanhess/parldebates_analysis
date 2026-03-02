@@ -19,12 +19,6 @@ library(here)
 source(here("Scripts/00_functions.R"))
 ```
 
-Set up parallel processing. Adjust the number of workers as needed. Default: 6 for subject downloads and 4 for transcripts.
-
-```{r}
-plan(multisession, workers = 4)
-```
-
 # Import Data
 
 ```{r}
@@ -72,6 +66,8 @@ get_subjects <- function(bsn, retries = 5, wait = 3) {
   return(FALSE)
 }
 
+plan(multisession, workers = 4)
+
 # Start parallel jobs
 fut <- future_walk(
   businesses_cleaned$BusinessShortNumber,
@@ -82,6 +78,8 @@ fut <- future_walk(
 # WAIT UNTIL ALL JOBS ARE FINISHED
 # value(fut)
 
+plan(sequential)
+
 if (!file.exists(here("Data/02_subjects.rds"))) {
   subjects <- map_dfr(
     list.files(here("Data/subjects"), full.names = TRUE),
@@ -89,7 +87,7 @@ if (!file.exists(here("Data/02_subjects.rds"))) {
   )
   write_rds(subjects, here("Data/02_subjects.rds"))
 } else {
-  read_rds(here("Data/02_subjects.rds"))
+  subjects <- read_rds(here("Data/02_subjects.rds"))
 }
 ```
 
@@ -144,6 +142,8 @@ get_transcripts <- function(sbj, retries = 5, wait = 3) {
   return(FALSE)
 }
 
+plan(multisession, workers = 4)
+
 fut <- future_walk(
   subjects$IdSubject,
   get_transcripts,
@@ -152,6 +152,8 @@ fut <- future_walk(
 
 # WAIT UNTIL ALL JOBS ARE FINISHED
 # value(fut)
+
+plan(sequential)
 
 if (!file.exists(here("Data/02_transcripts.rds"))) {
   transcripts <- map_dfr(
@@ -223,12 +225,22 @@ transcripts |>
 
 Filter transcripts to the relevant session range and remove entries that are not suitable for content analysis: Italian-language entries, Speakers outside National Council and Council of State (Especially Federal Council), vote records, unassigned speaker functions, and paragraphs with `[VS]` tags.
 
+Clean the Data, so it is ready for further processing.
+
 ```{r}
 sessions <- get_data(
   "Session",
   StartDate = c(">2015-01-01"),
   Language = "DE"
-)
+  )
+
+sessions_cleaned <- sessions |>
+  mutate(
+    IdSession = as.character(ID), 
+    legislative_period = as.character(LegislativePeriodNumber)
+  ) |> 
+  rename(session_start = StartDate, session_end = EndDate) |>
+  select(IdSession, SessionName, TypeName, legislative_period, session_start, session_end)
 
 transcripts_filtered <- transcripts |>
   filter(
@@ -253,6 +265,7 @@ subjects_climate <- subjects |>
   pull(IdSubject)
 
 transcripts_cleaned <- transcripts_filtered |>
+  left_join(sessions_cleaned, by = "IdSession") |> 
   rename(transcript_id = ID) |>
   mutate(
     transcript_text = Text |>
@@ -281,7 +294,12 @@ transcripts_cleaned <- transcripts_filtered |>
       VoteBusinessShortNumber,
       VoteBusinessTitle,
       Type,
-      SortOrder
+      SortOrder,
+      Start,
+      End,
+      Modified,
+      StartTimeWithTimezone,
+      EndTimeWithTimezone
     )
   )
 
@@ -341,7 +359,7 @@ write_rds(paragraphs_cleaned, here("Data/02_paragraphs_cleaned.rds"))
 
 # Visualize
 
-Plot paragraph length distribution.
+Plot paragraph length distribution:
 
 ```{r}
 plot_word_count_distribution(
@@ -351,7 +369,7 @@ plot_word_count_distribution(
 )
 ```
 
-Plot paragraph language distribution.
+Plot paragraph language distribution:
 
 ```{r}
 plot_categorical_distribution(
@@ -363,7 +381,7 @@ plot_categorical_distribution(
 )
 ```
 
-Plot business tag distribution.
+Plot business tag distribution:
 
 ```{r}
 plot_categorical_distribution(
