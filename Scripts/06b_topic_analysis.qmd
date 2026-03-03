@@ -16,6 +16,7 @@ library(tidyverse)
 library(tidytext)
 library(here)
 library(knitr)
+library(DT)
 library(purrr)
 source(here("Scripts/00_functions.R"))
 ```
@@ -140,7 +141,7 @@ topic_overview <-
 
 write_rds(topic_overview, here("Outputs/06_tbl_topic_overview.rds"))
 topic_overview |> 
-  kable(col.names = c("ID", "LLM Name", "Count", "%"))
+  datatable(colnames = c("ID", "LLM Name", "Count", "%"))
 ```
 
 Display KeyBERT and MMR representations for each topic.
@@ -150,7 +151,7 @@ representation_overview <- topic_info |>
   select(topic_id, OpenAI, KeyBERT, MMR)
 
 representation_overview |> 
-  kable()
+  datatable()
 ```
 
 ```{r}
@@ -249,7 +250,7 @@ documents_with_topics |>
   arrange(desc(topic_probability)) |>
   slice_sample(n = 5) |> 
   select(topic_id, transcript_text) |> 
-  kable()
+  datatable()
 ```
 
 ## Party Distribution per Topic
@@ -442,7 +443,7 @@ for (i in 1:7) {
 
 # compare Legislative Periods
 
-Create visualizatin like tihs:
+Create visualization like this:
 
 boxplot combined with scatter points, where each point represents a party's share in a topic for a given legislative period.
 
