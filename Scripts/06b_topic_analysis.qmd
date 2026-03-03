@@ -17,6 +17,7 @@ library(tidytext)
 library(here)
 library(knitr)
 library(purrr)
+library(DT)
 source(here("Scripts/00_functions.R"))
 ```
 
@@ -140,7 +141,7 @@ topic_overview <-
 
 write_rds(topic_overview, here("Outputs/06_tbl_topic_overview.rds"))
 topic_overview |> 
-  kable(col.names = c("ID", "LLM Name", "Count", "%"))
+  datatable(colnames = c("ID", "LLM Name", "Count", "%"))
 ```
 
 Display KeyBERT and MMR representations for each topic.
@@ -150,7 +151,7 @@ representation_overview <- topic_info |>
   select(topic_id, OpenAI, KeyBERT, MMR)
 
 representation_overview |> 
-  kable()
+  datatable()
 ```
 
 ```{r}
@@ -248,9 +249,7 @@ documents_with_topics |>
   arrange(desc(topic_probability)) |>
   slice_sample(n = 5) |> 
   select(topic_id, transcript_text) |> 
-  kable()
-
-# todo: make this table interactive so it uses up less space
+  datatable()
 ```
 
 ## Party Distribution per Topic
@@ -391,56 +390,6 @@ write_rds(p, here("Outputs/06_plot_heatmap_topic_party.rds"))
 p
 ```
 
-# Regression Analysis
-
-```{r}
-#| label: regression-analysis-setup
-
-# create dummy variables for topics 1 to 7
-regression_data <- paragraphs_topics_wide |>
-  distinct(transcript_id, topic_id, party_abb) |>
-  mutate(
-    topic_1 = factor(ifelse(topic_id == 1, 1, 0)),
-    topic_2 = factor(ifelse(topic_id == 2, 1, 0)),
-    topic_3 = factor(ifelse(topic_id == 3, 1, 0)),
-    topic_4 = factor(ifelse(topic_id == 4, 1, 0)),
-    topic_5 = factor(ifelse(topic_id == 5, 1, 0)),
-    topic_6 = factor(ifelse(topic_id == 6, 1, 0)),
-    topic_7 = factor(ifelse(topic_id == 7, 1, 0)),
-    party_abb = relevel(factor(party_abb), ref = "FDP") # change according to hypothesis
-  )
-```
-
-What influence does party affiliation have on topic assignment?
-
-```{r}
-#| label: regression-analysis
-
-# logistic regression with topic 1 as dependent variable and party affiliation as independent variable
-# model_1 <- glm(
-#   topic_1 ~ party_abb,
-#   data = regression_data,
-#   family = binomial()
-# )
-# summary(model_1)
-
-# for loop over topics 1 to 7
-models <- list()
-for (i in 1:7) {
-  formula <- as.formula(paste0("topic_", i, " ~ party_abb"))
-  model <- glm(formula, data = regression_data, family = binomial())
-  models[[paste0("model_", i)]] <- model
-}
-
-# print summary of each model
-for (i in 1:7) {
-  cat(paste0("Model for Topic ", i, ":\n"))
-  print(summary(models[[paste0("model_", i)]]))
-  cat("\n\n")
-}
-
-```
-
 # compare Legislative Periods
 
 Create visualizatin like tihs:
@@ -529,4 +478,5 @@ walk2(plots, unique(shares_long$topic_id), function(plot, topic) {
     here(paste0("Outputs/06_plot_period_comparison_topic_", topic, ".rds"))
   )
 })
-````
+```
+
