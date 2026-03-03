@@ -14,7 +14,7 @@ library(tidyverse)
 library(swissparl)
 library(furrr)
 library(future)
-library(tidytext)
+# library(tidytext)
 library(here)
 source(here("Scripts/00_functions.R"))
 ```
@@ -243,9 +243,10 @@ sessions_cleaned <- sessions |>
   select(IdSession, SessionName, TypeName, legislative_period, session_start, session_end)
 
 transcripts_filtered <- transcripts |>
+  left_join(sessions_cleaned, by = "IdSession") |> 
   filter(
-    IdSession >= 5002, # Spring session 2016
-    IdSession <= 5210, # Autumn session 2025
+    legislative_period >= 50, # start with legislative period 50, which started in late 2015
+    IdSession <= 5210, # end with Autumn session 2025, which is the most recent session
     LanguageOfText != "IT", # exclude Italian-language entries
     CouncilId %in% c(1, 2), # keep only Speakers from the National Council and Council of States
     !is.na(ParlGroupName), # exclude entries without assigned parliamentary groups
@@ -265,7 +266,6 @@ subjects_climate <- subjects |>
   pull(IdSubject)
 
 transcripts_cleaned <- transcripts_filtered |>
-  left_join(sessions_cleaned, by = "IdSession") |> 
   rename(transcript_id = ID) |>
   mutate(
     transcript_text = Text |>
