@@ -16,6 +16,7 @@ library(tidyverse)
 library(tidytext)
 library(here)
 library(knitr)
+library(purrr)
 source(here("Scripts/00_functions.R"))
 ```
 
@@ -439,96 +440,92 @@ for (i in 1:7) {
 
 ```
 
-# Topic Trends Over Time
+# compare Legislative Periods
 
-Analyze how topic prevalence changes over parliamentary sessions based on word counts.
+Create visualizatin like tihs:
 
-```{r}
-#| label: topic-trends
+boxplot combined with scatter points, where each point represents a party's share in a topic for a given legislative period.
 
-# # Calculate topic share by session using word counts
-# session_topic_shares <- paragraphs_topics_wide |>
-#   group_by(IdSession, session_median_date, topic) |>
-#   summarise(
-#     topic_words = sum(paragraph_word_count),
-#     .groups = 'drop'
-#   ) |>
-#   group_by(IdSession, session_median_date) |>
-#   mutate(
-#     total_words = sum(topic_words),
-#     topic_share = topic_words / total_words * 100
-#   ) |>
-#   ungroup()
+on y axis: the diff_from_parl of all parties for a given topic
+on x axis: legislative period
 
-# # Plot top 5 topics over time
-# top_topics <- df_topic_distribution |>
-#   arrange(desc(total_words)) |>
-#   head(5) |>
-#   pull(topic)
-
-# p <- session_topic_shares |>
-#   filter(topic %in% top_topics) |>
-#   ggplot(aes(x = session_median_date, y = topic_share, color = topic)) +
-#   geom_line(size = 1) +
-#   geom_point(size = 1.5) +
-#   labs(
-#     title = "Top 5 Topics Over Time",
-#     x = "Session Date",
-#     y = "Share of Climate Discourse (%)",
-#     color = "Topic"
-#   ) +
-#   theme_minimal() +
-#   theme(
-#     legend.position = "right"
-#   )
-
-# ggsave(here("Outputs/06_plot_topic_trends.png"), width = 10, height = 6)
-# write_rds(p, here("Outputs/06_plot_topic_trends.rds"))
-# p
-```
-
-# Party Topic Focus Over Time
-
-Track how each party's topic focus evolves across sessions based on word counts.
+variables in data: topic_id, party_abb, legislative_period
+variable to calculate: diff_from_parl
 
 ```{r}
-#| label: party-topic-time
+counts <- paragraphs_topics_wide |> 
+  group_by(party_abb, topic_id, legislative_period) |>
+  summarise(
+    wordcount_party_topic = sum(paragraph_word_count),
+    .groups = "drop"
+  ) |>
+  left_join(
+    paragraphs_topics_wide |>
+      group_by(party_abb) |>
+      summarise(wordcount_party = sum(paragraph_word_count), .groups = "drop"),
+    by = "party_abb"
+  )
 
-# # Calculate party-specific topic shares by session using word counts
-# party_session_topics <- paragraphs_topics_wide |>
-#   group_by(IdSession, session_median_date, party_abb, topic) |>
-#   summarise(
-#     topic_words = sum(paragraph_word_count),
-#     .groups = 'drop'
-#   ) |>
-#   group_by(IdSession, session_median_date, party_abb) |>
-#   mutate(
-#     party_total = sum(topic_words),
-#     topic_share_in_party = topic_words / party_total * 100
-#   ) |>
-#   ungroup()
+shares <- counts |> 
+  group_by(topic_id, legislative_period) |>
+  mutate(
+    party_share_in_topic = wordcount_party_topic / sum(wordcount_party_topic) * 100
+  ) |>
+  ungroup() |>
+  select(party_abb, topic_id, legislative_period, party_share_in_topic) |>
+  pivot_wider(
+    names_from = topic_id,
+    names_prefix = "party_share_in_topic",
+    values_from = party_share_in_topic
+  ) |>
+  left_join(
+    paragraphs_topics_wide |>
+      group_by(party_abb, legislative_period) |>
+      summarise(wordcount_party = sum(paragraph_word_count), .groups = "drop") |>
+      group_by(legislative_period) |>
+      mutate(party_share_in_parl = wordcount_party / sum(wordcount_party) * 100) |>
+      select(party_abb, legislative_period, party_share_in_parl),
+    by = c("party_abb", "legislative_period")
+  ) |>
+  select(party_abb, legislative_period, party_share_in_parl, starts_with("party_share_in_topic"))
 
-# # Select top topic for visualization
-# selected_topic <- top_topics[1]
+shares_long <- shares |> 
+  pivot_longer(
+    cols = starts_with("party_share_in_topic"),
+    names_to = "topic_id",
+    values_to = "party_share_in_topic"
+  ) |>
+  mutate(
+    topic_id = str_remove(topic_id, "party_share_in_topic"),
+    diff_from_parl = party_share_in_topic - party_share_in_parl,
+    topic_id = factor(as.numeric(topic_id), levels = rev(sort(unique(as.numeric(topic_id))))),
+    party_abb = fct_rev(factor(party_abb))
+  )
 
-# p <- party_session_topics |>
-#   filter(topic == selected_topic) |>
-#   ggplot(aes(x = session_median_date, y = topic_share_in_party, color = party_abb)) +
-#   geom_line(size = 1) +
-#   geom_point(size = 1.5) +
-#   scale_color_manual(values = party_colors) +
-#   labs(
-#     title = paste("Party Focus on Topic", selected_topic, "Over Time"),
-#     x = "Session Date",
-#     y = "Share of Party's Climate Discourse (%)",
-#     color = "Party"
-#   ) +
-#   theme_minimal() +
-#   theme(
-#     legend.position = "right"
-#   )
+plots <- map(unique(shares_long$topic_id), function(topic) {
+  df_plot <- shares_long |> 
+    filter(topic_id == topic)
+  
+  ggplot(df_plot, aes(x = legislative_period, y = diff_from_parl)) +
+    geom_boxplot() +
+    geom_jitter(width = 0.2, height = 0, aes(shape = party_abb)) +
+    labs(
+      title = paste("Party Share Difference from Parliament by Topic", topic),
+      x = "Legislative Period",
+      y = "Difference from Parliament (%)",
+      shape = "Party"
+    ) +
+    theme_minimal()
+})
 
-# ggsave(here("Outputs/06_plot_party_topic_trends.png"), width = 10, height = 6)
-# write_rds(p, here("Outputs/06_plot_party_topic_trends.rds"))
-# p
-```
+walk2(plots, unique(shares_long$topic_id), function(plot, topic) {
+  ggsave(
+    filename = here(paste0("Outputs/06_plot_period_comparison_topic_", topic, ".png")),
+    plot = plot
+  )
+  write_rds(
+    plot,
+    here(paste0("Outputs/06_plot_period_comparison_topic_", topic, ".rds"))
+  )
+})
+````
