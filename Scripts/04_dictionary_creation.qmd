@@ -40,28 +40,15 @@ labeled_dataset_cleaned <-
     by = join_by(paragraph_id)
   ) |>
   mutate(
-    sentiment = case_when(
+    climate = case_when(
       sentiment == "non_climate" ~ FALSE,
       sentiment == "non_classifiable" ~ FALSE,
       sentiment == "climate" ~ TRUE
     )
   ) |>
-  rename(
-    climate = sentiment,
-    LanguageOfText = LanguageOfText.x
-  ) |>
-  select(
-    !c(
-      annotation_id,
-      annotator,
-      created_at,
-      id,
-      lead_time,
-      updated_at
-    )
-  )
+  select(-sentiment)
 
-write_rds(labeled_dataset_cleaned, here("Data/04_labeled_dataset_cleaned.rds"))
+write_csv(labeled_dataset_cleaned, here("Data/04_labeled_dataset_cleaned.csv"))
 ```
 
 # Visualize

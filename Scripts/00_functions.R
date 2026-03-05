@@ -10,8 +10,8 @@ deepl_translate <- function(
 
   response <- POST(
     url,
+    add_headers(Authorization = paste("DeepL-Auth-Key", auth_key)),
     body = list(
-      auth_key = auth_key,
       text = text,
       target_lang = "EN"
     ),
@@ -19,17 +19,17 @@ deepl_translate <- function(
   )
 
   # error handling
-  if (response$status_code != 200) {
+  if (httr::status_code(response) != 200) {
     stop(
       "DeepL API Fehler: ",
-      status_code(response),
+      httr::status_code(response),
       " - ",
-      content(response, "text")
+      httr::content(response, "text", encoding = "UTF-8")
     )
   }
 
   # parse
-  result <- content(response, as = "parsed")
+  result <- httr::content(response, as = "parsed")
 
   # extract text
   result$translations[[1]]$text

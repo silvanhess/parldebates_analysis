@@ -25,7 +25,7 @@ paragraphs_cleaned <- read_rds(here("Data/02_paragraphs_cleaned.rds"))
 
 # Create Handcoding Dataset
 
-Create a balanced sample of 1000 paragraphs for manual labeling. The sampling targets:
+Create a balanced sample of 500 paragraphs for manual labeling. The sampling targets:
 
 - 50/50 distribution between French and German paragraphs
 - 70/30 distribution between climate-related and non-climate businesses
@@ -41,7 +41,7 @@ handcoding_dataset <- paragraphs_cleaned |>
     weight = cb_weight * lang_weight
   ) |>
   slice_sample(
-    n = 1000,
+    n = 500,
     weight_by = weight
   )
 
@@ -109,7 +109,6 @@ handcoding_dataset_full <- if (file.exists(here("Data/03_handcoding_translations
 
   write_rds(translations_df, here("Data/03_handcoding_translations.rds"))
   handcoding_dataset |> left_join(translations_df, by = join_by(paragraph_id))
-
 }
 ```
 
@@ -130,3 +129,4 @@ handcoding_dataset_translated <- handcoding_dataset_full |>
 
 write_csv(handcoding_dataset_translated, here("Data/03_handcoding_dataset_translated.csv"))
 ```
+
