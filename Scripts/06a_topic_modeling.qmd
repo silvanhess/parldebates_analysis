@@ -120,7 +120,7 @@ umap_model = UMAP(
 
 # HDBSCAN: Cluster documents into topics
 hdbscan_model = hdbscan.HDBSCAN(
-    min_cluster_size=30,
+    min_cluster_size=40,
     # min_samples=15,
     cluster_selection_epsilon=0.0,
     # max_cluster_size=500,

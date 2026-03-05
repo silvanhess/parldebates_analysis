@@ -20,6 +20,7 @@ library(dotenv)
 library(ellmer)
 library(furrr)
 library(future)
+library(DT)
 source(here("Scripts/00_functions.R"))
 load_dot_env(here(".env"))
 ```
@@ -121,7 +122,8 @@ paragraphs_classified <- words_cleaned |>
     climate_paragraph = if_else(n_keywords_found > 0, TRUE, FALSE),
     .groups = "drop"
   ) |>
-  left_join(paragraphs_cleaned, by = join_by(paragraph_id))
+  left_join(paragraphs_cleaned, by = join_by(paragraph_id)) |> 
+  select(-paragraph_text.y)
 
 write_rds(paragraphs_classified, here("Data/05_paragraphs_classified.rds"))
 ```
@@ -147,8 +149,7 @@ paragraphs_subjects_cleaned <- paragraphs_subjects_long |>
   )
 
 paragraphs_classified_wide <- paragraphs_subjects_cleaned |>
-  rename(paragraph_text = paragraph_text.x) |> 
-  select(-paragraph_text.y)
+  rename(paragraph_text = paragraph_text.x)
 ```
 
 A business is assigned a `climate_temp` label if at least 10% of its paragraphs match the dictionary or the paragraph references the climate dictionary explicitly. This threshold ensures that only businesses with substantive climate content are included.
@@ -300,7 +301,7 @@ business_classification_final |>
   distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
   arrange(desc(n_paragraphs)) |> 
   slice_head(n = 10) |> 
-  knitr::kable()
+  datatable()
 ```
 
 Print the largest non climate relevant businesses.
@@ -311,7 +312,7 @@ business_classification_final |>
   distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
   arrange(desc(n_paragraphs)) |> 
   slice_head(n = 10) |> 
-  knitr::kable()
+  datatable()
 ```
 
 Print the climate businesses around the mean size of a climate business in the dataset.
@@ -321,7 +322,7 @@ business_classification_final |>
   filter(final_climate == TRUE) |> 
   distinct(Title, n_paragraphs, proportion_climate_paragraphs) |> 
   slice_min(abs(n_paragraphs - mean(n_paragraphs)), n = 10) |> 
-  knitr::kable()
+  datatable()
 ```
 
 Print the climate businesses just above the threshold.
@@ -332,10 +333,10 @@ business_classification_final |>
   distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
   arrange(proportion_climate_paragraphs) |>  
   slice_head(n = 10) |> 
-  knitr::kable()
+  datatable()
 ```
 
-Few False Positives, but OK since Topic Modeling handels Outliers well. Also, very small businesses that won't have much influence on the overall topic modeling results.
+Still a few False Positives, but OK since Topic Modeling handels Outliers well. Also, very small businesses that won't have much influence on the overall topic modeling results.
 
 Print non-climate businesses just below the threshold.
 
@@ -345,10 +346,10 @@ business_classification_final |>
   distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
   arrange(desc(proportion_climate_paragraphs)) |>  
   slice_head(n = 10) |> 
-  knitr::kable()
+  datatable()
 ```
 
-Some medium and large businesses below the threshold with some climate relevanc, but not enough to be classified as climate relevant. This weakness is acknowlegedged, but the threshold is necessary to ensure that the final climate classification is meaningful and not diluted by businesses with only marginal climate content.
+Some medium-size businesses below the threshold with some climate relevance, but not enough to be classified as climate relevant. This weakness is acknowleged, but the threshold is necessary to ensure that the final climate classification is meaningful and not diluted by businesses with only marginal climate content.
 
 # Paragraph-Level Climate Classification
 

@@ -15,7 +15,6 @@ Import packages and helper functions.
 library(tidyverse)
 library(tidytext)
 library(here)
-library(knitr)
 library(purrr)
 library(DT)
 source(here("Scripts/00_functions.R"))
@@ -32,7 +31,7 @@ documents_with_topics <- read_csv(here("Data/06_documents_with_topics.csv")) |>
   # filter(topic != "-1") |> 
   mutate(
     transcript_id = as.character(transcript_id),
-    topic_id = topic + 1
+    topic_id = as.character(topic + 1)
   ) |> 
   select(-topic)
 
@@ -41,9 +40,9 @@ topic_info <- read_csv(here("Data/06_topic_info.csv")) |>
   # rename(topic = Topic, topic_name = Name) |>
   mutate(
     # topic = sprintf("%02d", as.numeric(topic)),
-    topic_id = row_number() - 1, 
+    topic_id = as.character(row_number() - 1), 
     OpenAI = str_remove_all(OpenAI, "\\[|\\]|'"),
-    OpenAI = ifelse(topic_id == 0, "Outliers", OpenAI),
+    OpenAI = ifelse(topic_id == "0", "Outliers", OpenAI),
     KeyBERT = str_remove_all(KeyBERT, "\\[|\\]|'"),
     MMR = str_remove_all(MMR, "\\[|\\]|'")
   ) |> 
@@ -174,8 +173,7 @@ p <- ggplot(df_topic_distribution, aes(x = topic_id, y = pct_total)) +
   # coord_flip() +
   labs(
     x = "Topic",
-    y = "Percentage of Total Words",
-    title = "Distribution of Words across Topics"
+    y = "Percentage of Total Words"
   ) +
   theme_minimal()
 
@@ -200,7 +198,7 @@ Which businesses are most prevalent in each topic?
   group_by(topic_id) |>
   slice_head(n = 5) |>
   ungroup() |> 
-  print(n = Inf)
+  datatable()
 ```
 
 Which climate keywords are most prevalent in each topic?
@@ -220,7 +218,7 @@ Which climate keywords are most prevalent in each topic?
   ) |>
   arrange(topic_id, desc(freq)) |> 
   slice_head(n = 5) |> 
-  print(n = Inf)
+  datatable()
 
 # ggplot(
 #   top_keywords_per_topic, 
@@ -234,7 +232,6 @@ Which climate keywords are most prevalent in each topic?
 #   coord_flip() +
 #   facet_wrap(~ topic, scales = "free_y") +
 #   labs(
-#     title = "Top Keywords by Topic",
 #     x = NULL,
 #     y = "Count"
 #   ) +
@@ -261,7 +258,7 @@ Party composition across all topics (stacked bar charts) based on word counts.
 
 df_plot <- paragraphs_topics_wide |>
   mutate(topic_id = factor(topic_id, levels = rev(sort(unique(topic_id))))) |> 
-  # filter(topic != "-1") |>
+  filter(topic_id %in% c("1", "2", "4", "5", "6")) |>
   group_by(topic_id, party_abb) |>
   summarise(
     group_words = sum(paragraph_word_count),
@@ -286,15 +283,13 @@ p <- ggplot(
     size = 3.5) +
   scale_fill_manual(values = party_colors) +
   labs(
-    title = "Party Share per Topic",
     x = "Share (%)",
     y = "Topic",
     fill = "Party"
   ) +
   theme_minimal() +
   theme(
-    legend.position = "right",
-    plot.title = element_text(hjust = 0.5)
+    legend.position = "right"
   )
 
 ggsave(here("Outputs/06_plot_topic_party_distribution.png"))
@@ -302,7 +297,7 @@ write_rds(p, here("Outputs/06_plot_topic_party_distribution.rds"))
 p
 ```
 
-# Heatmap of party-topic emphasis
+# Compare Topic Representation by Party
 
 x = share of party in parliament
 y = share of party in topic
@@ -312,13 +307,14 @@ x/y = over/under emphasis of topic by party compared to overall parliamentary pr
 #| label: heatmap-party-topic
 
 counts <- paragraphs_topics_wide |>
-  # topic 6 and 7 can be joined into one topic, as they are very similar and both have low representation
-  mutate(
-    topic_id = case_when(
-      topic_id %in% c(6,7) ~ "6",
-      .default = as.character(topic_id)
-    )
-  ) |>
+  # # topic 6 and 7 can be joined into one topic, as they are very similar and both have low representation
+  # mutate(
+  #   topic_id = case_when(
+  #     topic_id %in% c(6,7) ~ "6/7",
+  #     .default = as.character(topic_id)
+  #   )
+  # ) |>
+  filter(topic_id %in% c("1", "2", "4", "5", "6")) |>
   group_by(party_abb, topic_id) |>
   summarise(
     wordcount_party_topic = sum(paragraph_word_count),
@@ -364,33 +360,35 @@ shares_long <- shares |>
   ) |>
   mutate(
     topic_id = str_remove(topic_id, "party_share_in_topic"),
-    diff_from_parl = party_share_in_topic - party_share_in_parl,
-    topic_id = factor(as.numeric(topic_id), levels = rev(sort(unique(as.numeric(topic_id))))),
+    topic_id = factor(as.numeric(topic_id), levels = sort(unique(as.numeric(topic_id)))),
+    topic_diff = party_share_in_topic - party_share_in_parl,
+    topic_ratio = (party_share_in_topic / party_share_in_parl -1) * 100,
     party_abb = fct_rev(factor(party_abb))
   )
 
-p <- ggplot(shares_long, aes(x = party_abb, y = topic_id, fill = diff_from_parl)) +
-  geom_tile() +
-  geom_text(aes(label = sprintf("%+.1f", diff_from_parl)), size = 3) +
-  scale_fill_gradient2(
-    low = "blue", mid = "white", high = "red",
-    midpoint = 0,
-    name = "Deviation from\nparl. share (%)"
+p <- 
+  ggplot(
+    shares_long, 
+    aes(
+      x = topic_id, 
+      y = topic_diff)
   ) +
+  geom_boxplot(outliers = FALSE) +
+  geom_jitter(width = 0.3, height = 0.3, aes(shape = party_abb)) +
   labs(
-    x = "Party",
-    y = "Topic",
-    title = "Party share in topic vs. party share in parliament"
+    x = "Topic",
+    y = "Deviation from Party Speech Average (%)",
+    shape = "Party"
   ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme_minimal() #+
+  # theme(legend.position = "bottom", legend.direction = "horizontal")
 
-ggsave(here("Outputs/06_plot_heatmap_topic_party.png"))
-write_rds(p, here("Outputs/06_plot_heatmap_topic_party.rds"))
+ggsave(here("Outputs/06_plot_topic_party_comparison.png"))
+write_rds(p, here("Outputs/06_plot_topic_party_comparison.rds"))
 p
 ```
 
-# compare Legislative Periods
+# Compare Legislative Periods
 
 Create visualizatin like tihs:
 
@@ -447,8 +445,9 @@ shares_long <- shares |>
   ) |>
   mutate(
     topic_id = str_remove(topic_id, "party_share_in_topic"),
-    diff_from_parl = party_share_in_topic - party_share_in_parl,
     topic_id = factor(as.numeric(topic_id), levels = rev(sort(unique(as.numeric(topic_id))))),
+    topic_diff = party_share_in_topic - party_share_in_parl,
+    topic_ratio = (party_share_in_topic / party_share_in_parl -1) * 100,
     party_abb = fct_rev(factor(party_abb))
   )
 
@@ -456,11 +455,10 @@ plots <- map(unique(shares_long$topic_id), function(topic) {
   df_plot <- shares_long |> 
     filter(topic_id == topic)
   
-  ggplot(df_plot, aes(x = legislative_period, y = diff_from_parl)) +
-    geom_boxplot() +
+  ggplot(df_plot, aes(x = legislative_period, y = topic_diff)) +
+    geom_boxplot(outliers = FALSE) +
     geom_jitter(width = 0.2, height = 0, aes(shape = party_abb)) +
     labs(
-      title = paste("Party Share Difference from Parliament by Topic", topic),
       x = "Legislative Period",
       y = "Difference from Parliament (%)",
       shape = "Party"
@@ -469,14 +467,16 @@ plots <- map(unique(shares_long$topic_id), function(topic) {
 })
 
 walk2(plots, unique(shares_long$topic_id), function(plot, topic) {
+  dir.create(here("Outputs/06_topics_timeseries"), showWarnings = FALSE)
   ggsave(
-    filename = here(paste0("Outputs/06_plot_period_comparison_topic_", topic, ".png")),
+    filename = here(paste0("Outputs/06_topics_timeseries/06_plot_period_comparison_topic_", topic, ".png")),
     plot = plot
   )
   write_rds(
     plot,
-    here(paste0("Outputs/06_plot_period_comparison_topic_", topic, ".rds"))
+    here(paste0("Outputs/06_topics_timeseries/06_plot_period_comparison_topic_", topic, ".rds"))
   )
 })
+plots
 ```
 
