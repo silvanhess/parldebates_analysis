@@ -8,6 +8,8 @@ Scripts/arc/
 arc/
 Outputs/
 labeled_dataset.csv
+Scripts/.ipynb_checkpoints/
+Model-Outputs/
 
 # BERT-Finetuning/arc/
 # BERTopic/arc/
@@ -26,5 +28,4 @@ labeled_dataset.csv
 **/*.quarto_ipynb
 .quarto/
 .quarto/
-
 /.quarto/
