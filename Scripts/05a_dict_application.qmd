@@ -1,0 +1,125 @@
+---
+title: "Dictionary-Based Classification"
+format: html
+execute:
+  warning: false
+---
+
+# Setup
+
+Import all necessary packages and functions.
+
+```{r}
+#| label: setup
+
+library(tidyverse)
+library(tidytext)
+library(stopwords)
+library(here)
+library(dotenv)
+library(ellmer)
+library(furrr)
+library(future)
+library(DT)
+source(here("Scripts/00_functions.R"))
+load_dot_env(here(".env"))
+```
+
+# Import Data
+
+```{r}
+#| label: data-import
+
+paragraphs_cleaned <- read_rds(here("Data/02_paragraphs_cleaned.rds"))
+french_dictionary_curated <- 
+  read_csv(here("french_dictionary_curated.csv")) |>
+  rename(keyword_original = keyword_french)
+german_dictionary_curated <- 
+  read_csv(here("german_dictionary_curated.csv")) |>
+  rename(keyword_original = keyword_german)
+```
+
+# Data Preparation
+
+## Dictionary
+
+Combine the curated German and French dictionaries into a single lookup table. Keywords are lowercased, stripped of non-alphanumeric characters (except hyphens and apostrophes), and whitespace-normalised.
+
+```{r}
+#| label: dictionary
+
+dictionary_all_cleaned <- german_dictionary_curated |>
+  bind_rows(french_dictionary_curated) |>
+  mutate(
+    keyword_original = str_to_lower(keyword_original),
+    keyword_original = str_replace_all(keyword_original, "[^[:alnum:]'-]", ""),
+    keyword_original = str_squish(keyword_original)
+  ) |> 
+  distinct(keyword_original, keyword_english)
+
+write_rds(dictionary_all_cleaned, here("Data/05_dictionary_all_cleaned.rds"))
+```
+
+## Text Pre-Processing
+
+Tokenise the paragraph texts into individual words, apply the same normalisation as the dictionary, and remove German and French stopwords.
+
+```{r}
+#| label: preprocessing
+
+words <- paragraphs_cleaned |>
+  select(paragraph_id, paragraph_text) |>
+  unnest_tokens(
+    output = "word",
+    input = "paragraph_text",
+    token = "words",
+    drop = FALSE
+  )
+
+german_stopwords <- c(
+  stopwords::stopwords("de", source = "snowball"),
+  "dass"
+) |>
+  sort()
+
+french_stopwords <- stopwords::stopwords("fr", source = "snowball")
+
+stopwords_all <- tibble(stopwords = c(german_stopwords, french_stopwords))
+
+words_cleaned <- words |>
+  mutate(
+    word = str_to_lower(word),
+    word = str_replace_all(word, "[^[:alnum:]'-]", ""),
+    word = str_squish(word)
+  ) |>
+  anti_join(stopwords_all, by = join_by(word == stopwords))
+
+write_rds(words_cleaned, here("Data/05_words_cleaned.rds"))
+```
+
+# Dictionary Classification
+
+Match each word against the dictionary and aggregate results at the paragraph level to determine which paragraphs contain at least one keyword match.
+
+```{r}
+#| label: apply-dictionary
+
+paragraphs_classified_dict <- words_cleaned |>
+  left_join(
+    dictionary_all_cleaned, 
+    by = join_by(word == keyword_original), 
+    relationship = "many-to-one") |>
+  group_by(paragraph_id, paragraph_text) |>
+  summarise(
+    keywords_found = paste(na.omit(unique(keyword_english)), collapse = ", "),
+    n_keywords_found = sum(!is.na(keyword_english)),
+    dict_prediction = if_else(n_keywords_found > 0, TRUE, FALSE),
+    .groups = "drop"
+  ) |>
+  left_join(paragraphs_cleaned, by = join_by(paragraph_id)) |> 
+  select(-paragraph_text.y) |> 
+  rename(paragraph_text = paragraph_text.x)
+
+write_rds(paragraphs_classified_dict, here("Data/05_paragraphs_classified_dict.rds"))
+```
+

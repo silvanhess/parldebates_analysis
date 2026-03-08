@@ -219,8 +219,8 @@ french_dictionary$keyword_english <- map_chr(
 )
 
 # Export for manual curation
-write.xlsx(german_dictionary, here("Data/04_german_dictionary.xlsx"))
-write.xlsx(french_dictionary, here("Data/04_french_dictionary.xlsx"))
+write_csv(german_dictionary, here("german_dictionary.csv"))
+write_csv(french_dictionary, here("french_dictionary.csv"))
 
 # After reviewing, save the cleaned versions as *_curated.csv
 ```

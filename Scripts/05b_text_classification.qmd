@@ -28,104 +28,72 @@ load_dot_env(here(".env"))
 # Import Data
 
 ```{r}
-#| label: data-import
-
-paragraphs_cleaned <- read_rds(here("Data/02_paragraphs_cleaned.rds"))
-# businesses_cleaned <- 
-#   read_rds(here("Data/01_businesses_cleaned.rds")) |> 
-#   select(BusinessShortNumber, Title)
 subjects <- 
   read_rds(here("Data/02_subjects.rds")) |> 
   select(IdSubject, BusinessShortNumber, Title)
-french_dictionary_curated <- 
-  read_csv(here("french_dictionary_curated.csv")) |>
-  rename(keyword_original = keyword_french)
-german_dictionary_curated <- 
-  read_csv(here("german_dictionary_curated.csv")) |>
-  rename(keyword_original = keyword_german)
 ```
 
-# Data Preparation
+# Dictionary-Based Classification
 
-## Dictionary
-
-Combine the curated German and French dictionaries into a single lookup table. Keywords are lowercased, stripped of non-alphanumeric characters (except hyphens and apostrophes), and whitespace-normalised.
+Here the dictionary-based classification results will be imported. The classification is based on the presence of keywords from the curated German and French dictionaries in the paragraphs. A paragraph is classified as climate-relevant if it contains at least one keyword from the dictionary.
 
 ```{r}
-#| label: dictionary
+#| label: dict-classification
 
-dictionary_all_cleaned <- german_dictionary_curated |>
-  bind_rows(french_dictionary_curated) |>
-  mutate(
-    keyword_original = str_to_lower(keyword_original),
-    keyword_original = str_replace_all(keyword_original, "[^[:alnum:]'-]", ""),
-    keyword_original = str_squish(keyword_original)
-  ) |> 
-  distinct(keyword_original, keyword_english)
-
-write_rds(dictionary_all_cleaned, here("Data/05_dictionary_all_cleaned.rds"))
+paragraphs_classified_dict <- read_rds(here("Data/05_paragraphs_classified_dict.rds"))
 ```
 
-## Text Pre-Processing
+# BERT Classification
 
-Tokenise the paragraph texts into individual words, apply the same normalisation as the dictionary, and remove German and French stopwords.
+Here the BERT-based classification results will be imported. 
 
 ```{r}
-#| label: preprocessing
+#| label: bert-classification
 
-words <- paragraphs_cleaned |>
-  select(paragraph_id, paragraph_text) |>
-  unnest_tokens(
-    output = "word",
-    input = "paragraph_text",
-    token = "words",
-    drop = FALSE
-  )
-
-german_stopwords <- c(
-  stopwords::stopwords("de", source = "snowball"),
-  "dass"
-) |>
-  sort()
-
-french_stopwords <- stopwords::stopwords("fr", source = "snowball")
-
-stopwords_all <- tibble(stopwords = c(german_stopwords, french_stopwords))
-
-words_cleaned <- words |>
-  mutate(
-    word = str_to_lower(word),
-    word = str_replace_all(word, "[^[:alnum:]'-]", ""),
-    word = str_squish(word)
-  ) |>
-  anti_join(stopwords_all, by = join_by(word == stopwords))
-
-write_rds(words_cleaned, here("Data/05_words_cleaned.rds"))
+classified_paragraphs_bert <- read_csv(here("Model-Outputs/classified_paragraphs.csv"))
+classified_paragraphs_bert_cleaned <- classified_paragraphs_bert |>
+  mutate(predicted_label = ifelse(predicted_label == 1, TRUE, FALSE)) |> 
+  select(-token_length) |> 
+  rename(paragraph_id = id)
 ```
 
-# Dictionary Classification
+# Business-Level Climate Classification
 
-Match each word against the dictionary and aggregate results at the paragraph level to determine which paragraphs contain at least one keyword match.
+Compare the dictionary-based classification with the BERT-based classification. 
 
 ```{r}
-#| label: apply-dictionary
-
-paragraphs_classified <- words_cleaned |>
+paragraphs_classified_joint <- paragraphs_classified_dict |> 
   left_join(
-    dictionary_all_cleaned, 
-    by = join_by(word == keyword_original), 
-    relationship = "many-to-one") |>
-  group_by(paragraph_id, paragraph_text) |>
-  summarise(
-    keywords_found = paste(na.omit(unique(keyword_english)), collapse = ", "),
-    n_keywords_found = sum(!is.na(keyword_english)),
-    climate_paragraph = if_else(n_keywords_found > 0, TRUE, FALSE),
-    .groups = "drop"
-  ) |>
-  left_join(paragraphs_cleaned, by = join_by(paragraph_id)) |> 
-  select(-paragraph_text.y)
+    classified_paragraphs_bert_cleaned |> select(paragraph_id, predicted_label),
+    by = join_by(paragraph_id)
+  ) |> 
+  mutate(
+    either_prediction = dict_prediction | predicted_label,
+    both_predictions = dict_prediction & predicted_label)
+```
 
-write_rds(paragraphs_classified, here("Data/05_paragraphs_classified.rds"))
+Visualize the comparison results.
+
+Show the dict prediction, the bert prediction and the overlap between the two predictions.
+
+```{r}
+df_plot <- paragraphs_classified_joint |> 
+  summarise(
+    Dictionary = sum(dict_prediction),
+    Transformer = sum(predicted_label),
+    Overlap = sum(dict_prediction & predicted_label)
+  ) |> 
+  pivot_longer(cols = everything(), names_to = "Category", values_to = "Count")
+
+p <- ggplot(df_plot, aes(x = Category, y = Count, fill = Category)) +
+  geom_col() +
+  geom_text(aes(label = Count), vjust = 2.0) +
+  theme_minimal() +
+  labs(x = "Prediction Category", y = "Count") +
+  theme(legend.position = "none")
+ggsave(here("Outputs/05_prediction_comparison.png"), p)
+write_rds(p, here("Outputs/05_prediction_comparison.rds"))
+p
 ```
 
 Do some preprocessing to prepare for final classification.
@@ -134,37 +102,58 @@ Do some preprocessing to prepare for final classification.
 # n_distinct(subjects$IdSubject)
 
 paragraphs_subjects_long <- left_join(
-  paragraphs_classified,
+  paragraphs_classified_dict,
   subjects,
   by = join_by(IdSubject),
   relationship = "many-to-many"
 ) |> 
   select(-IdSubject)
 
-paragraphs_subjects_cleaned <- paragraphs_subjects_long |> 
+paragraphs_classified_wide <- paragraphs_subjects_long |> 
   group_by(across(c(-BusinessShortNumber, -Title))) |> 
   summarise(
     BusinessShortNumber = paste(BusinessShortNumber, collapse = " | "),
     Title = paste(Title, collapse = " | ")
   )
-
-paragraphs_classified_wide <- paragraphs_subjects_cleaned |>
-  rename(paragraph_text = paragraph_text.x)
 ```
 
-A business is assigned a `climate_temp` label if at least 10% of its paragraphs match the dictionary or the paragraph references the climate dictionary explicitly. This threshold ensures that only businesses with substantive climate content are included.
+A business is assigned a `climate_temp` label if at least 5% of its paragraphs match the dictionary or the paragraph references the climate dictionary explicitly. This threshold ensures that only businesses with substantive climate content are included. The threshold was determined by manually inspecting the distribution of the proportion of climate paragraphs across businesses and identifying a natural cutoff point that balances inclusivity with relevance.
 
 ```{r}
+#| label: business-classification
+
+threshold <- 0.1
+
 business_classification <- paragraphs_classified_wide |> 
   group_by(BusinessShortNumber, Title) |>
   summarise(
     n_paragraphs = n(),
-    n_climate_paragraphs = sum(climate_paragraph),
+    n_climate_paragraphs = sum(dict_prediction),
     proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
-    climate_temp = case_when(proportion_climate_paragraphs >= 0.1 ~ TRUE,
+    climate_temp = case_when(proportion_climate_paragraphs >= threshold ~ TRUE,
     .default = FALSE),
     .groups = "drop"
   )
+```
+
+Plot a histogram of the distribution of the proportion of climate paragraphs for all businesses.
+
+```{r}
+#| label: histogram
+
+df_plot <- business_classification |> 
+  filter(proportion_climate_paragraphs >= 0.01 & proportion_climate_paragraphs <= 0.2)
+
+p <- ggplot(df_plot, aes(x = proportion_climate_paragraphs)) +
+  geom_histogram() +
+  theme_minimal() +
+  labs(
+    x = "Proportion of Climate Paragraphs", 
+    y = "Count"
+  )
+ggsave(here("Outputs/05_proportion_climate_paragraphs_histogram.png"), p)
+write_rds(p, here("Outputs/05_proportion_climate_paragraphs_histogram.rds"))
+p
 ```
 
 In a next step, an LLM will be used to check the business Titles of climate_temp businesses and assign the final `climate` label. This is necessary to exclude false positives, i.e. businesses that contain some climate keywords but are not actually about climate topics.
@@ -233,23 +222,6 @@ if (file.exists(here("Data/05_business_classification_final.rds"))) {
 }
 ```
 
-## Transcript-Level Climate Classification
-
-As an alternative to the business-level classification, a transcript is classified as climate-relevant if it contains at least one paragraph that matches the dictionary. This captures a wider variety of climate-relevant language, but makes it harder to identify specific climate-related topics in the topic modeling step, since many transcripts will contain only a small proportion of climate-relevant content.
-
-```{r}
-transcript_classification <- paragraphs_classified_wide |> 
-  group_by(transcript_id) |>
-  summarise(
-    n_paragraphs = n(),
-    n_climate_paragraphs = sum(climate_paragraph),
-    proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
-    climate_transcript = case_when(n_climate_paragraphs > 0 ~ TRUE,
-    .default = FALSE),
-    .groups = "drop"
-  )
-```
-
 # Climate Business Analysis
 
 Plot some summary statistics about the climate businesses
@@ -267,12 +239,15 @@ summary_stats <- tibble(
   )
 )
 
-ggplot(summary_stats, aes(x = category, y = count, fill = category)) +
+p <- ggplot(summary_stats, aes(x = category, y = count, fill = category)) +
   geom_col() +
   geom_text(aes(label = count), vjust = -0.5) +
   theme_minimal() +
   labs(title = "Summary of Business Classifications", x = "Category", y = "Count") +
   theme(legend.position = "none")
+ggsave(here("Outputs/05_business_classification_summary.png"), p)
+write_rds(p, here("Outputs/05_business_classification_summary.rds"))
+p
 ```
 
 Plot the distribution of the number of pargraphs for final_climate.
@@ -342,7 +317,7 @@ Print non-climate businesses just below the threshold.
 
 ```{r}
 business_classification_final |> 
-  filter(final_climate == FALSE, proportion_climate_paragraphs < 0.1) |>
+  filter(final_climate == FALSE, proportion_climate_paragraphs < threshold) |>
   distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
   arrange(desc(proportion_climate_paragraphs)) |>  
   slice_head(n = 10) |> 
@@ -382,7 +357,6 @@ p <- plot_categorical_distribution(
 write_rds(p, here("Outputs/05_paragraphs_climate_distribution.rds"))
 p
 ```
-
 
 # Prepare Data for Topic Modeling
 

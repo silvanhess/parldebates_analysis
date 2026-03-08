@@ -354,7 +354,16 @@ paragraphs_cleaned <- paragraphs_raw |>
     paragraph_word_count = str_count(paragraph_text, "\\S+")
   )
 
-write_rds(paragraphs_cleaned, here("Data/02_paragraphs_cleaned.rds"))
+write_csv(paragraphs_cleaned, here("Data/02_paragraphs_cleaned.csv"))
+```
+
+Calculate Statistics
+
+```{r}
+n_paragraphs <- paragraphs_cleaned |> 
+  summarise(count = n()) |> 
+  pull(count)
+write_rds(n_paragraphs, here("Outputs/02_n_paragraphs.rds"))
 ```
 
 # Visualize
