@@ -117,7 +117,7 @@ paragraphs_classified_wide <- paragraphs_subjects_long |>
   )
 ```
 
-A business is assigned a `climate_temp` label if at least 5% of its paragraphs match the dictionary or the paragraph references the climate dictionary explicitly. This threshold ensures that only businesses with substantive climate content are included. The threshold was determined by manually inspecting the distribution of the proportion of climate paragraphs across businesses and identifying a natural cutoff point that balances inclusivity with relevance.
+A business is assigned a `climate_temp` label if at least 10% of its paragraphs match the dictionary or the paragraph references the climate dictionary explicitly. This threshold ensures that only businesses with substantive climate content are included. The threshold was determined by manually inspecting the distribution of the proportion of climate paragraphs across businesses and identifying a natural cutoff point that balances inclusivity with relevance.
 
 ```{r}
 #| label: business-classification
@@ -225,23 +225,25 @@ if (file.exists(here("Data/05_business_classification_final.rds"))) {
 # Climate Business Analysis
 
 Plot some summary statistics about the climate businesses
-- Number of businesses in business_classification
-- Number of climate_temp in business_classification
-- Number of final_climate in business_classification_final
+- Number of businesses with proportion_climate_paragraphs > 0
+- Number of businesses in climate_temp
+- Number of businesses in final_climate
 
 ```{r}
+categories = c("Dictionary Match", ">10% Threshold", "After LLM Review")
+
 summary_stats <- tibble(
-  category = c("Total Businesses", "Climate Temp", "Final Climate"),
+  category = factor(categories, levels = categories),
   count = c(
-    nrow(business_classification),
-    sum(business_classification$climate_temp),
+    nrow(business_classification_final |> filter(proportion_climate_paragraphs > 0)),
+    sum(business_classification_final$climate_temp),
     sum(business_classification_final$final_climate)
   )
 )
 
 p <- ggplot(summary_stats, aes(x = category, y = count, fill = category)) +
   geom_col() +
-  geom_text(aes(label = count), vjust = -0.5) +
+  geom_text(aes(label = count), vjust = 1.5) +
   theme_minimal() +
   labs(title = "Summary of Business Classifications", x = "Category", y = "Count") +
   theme(legend.position = "none")
