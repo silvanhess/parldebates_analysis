@@ -101,6 +101,8 @@ Do some preprocessing to prepare for final classification.
 ```{r}
 # n_distinct(subjects$IdSubject)
 
+# Create long table: paragraphs can have more than one bsn assigned
+
 paragraphs_subjects_long <- left_join(
   paragraphs_classified_dict,
   subjects,

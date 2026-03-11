@@ -390,14 +390,41 @@ plot_categorical_distribution(
 )
 ```
 
+# Join and Plot business information
+
+```{r}
+# create long table (a paragraph can have more than one bsn assigned)
+paragraphs_subjects_long <- 
+  left_join(
+    paragraphs_classified_dict,
+    subjects |> select(IdSubject, BusinessShortNumber),
+    by = join_by(IdSubject),
+    relationship = "many-to-many"
+  ) |> 
+  left_join(
+    businesses_cleaned |> select(BusinessShortNumber, BusinessTypeName, Title),
+    by = join_by(BusinessShortNumber),
+    relationship = "many-to-one"
+  ) |> 
+  select(-IdSubject)
+
+# summarise
+paragraphs_subjects_summary <- paragraphs_subjects_long |> 
+  group_by(across(c(-BusinessShortNumber, -BusinessTypeName, -Title))) |> 
+  summarise(
+    BusinessShortNumber = paste(BusinessShortNumber, collapse = " | "),
+    BusinessTypeName = paste(BusinessTypeName, collapse = " | "),
+    Title = paste(Title, collapse = " | ")
+  )
+```
+
 Plot business tag distribution:
 
 ```{r}
 plot_categorical_distribution(
-  data = paragraphs_cleaned,
-  group_col = "business_tag_climate",
-  x_label = "Energy, Transport or Environment Related Business",
-  title = "Distribution of Business Tags in Complete Dataset",
-  output_path = "Outputs/02_paragraphs_cleaned_business_tags_distribution.png"
+  data = paragraphs_subjects_long,
+  group_col = "BusinessTypeName",
+  x_label = NULL,
+  output_path = "Outputs/02_business_type_distribution.png"
 )
 ```
