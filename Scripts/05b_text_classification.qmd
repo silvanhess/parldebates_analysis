@@ -40,7 +40,8 @@ Here the dictionary-based classification results will be imported. The classific
 ```{r}
 #| label: dict-classification
 
-paragraphs_classified_dict <- read_rds(here("Data/05_paragraphs_classified_dict.rds"))
+paragraphs_classified_dict <- read_rds(here("Data/05_paragraphs_classified_dict.rds")) |> 
+  mutate(IdSubject = as.character(IdSubject))
 ```
 
 # BERT Classification

@@ -35,6 +35,9 @@ documents_with_topics <- read_csv(here("Data/06_documents_with_topics.csv")) |>
   ) |> 
   select(-topic)
 
+n_documents <- nrow(documents_with_topics)
+write_rds(n_documents, here("Outputs/06_n_documents.rds"))
+
 topic_info <- read_csv(here("Data/06_topic_info.csv")) |>
   # filter(topic != "-1") |> 
   # rename(topic = Topic, topic_name = Name) |>
@@ -50,8 +53,12 @@ topic_info <- read_csv(here("Data/06_topic_info.csv")) |>
 
 write_rds(topic_info, here("Data/06_r_topic_info.rds"))  
 
+n_topics <- nrow(topic_info) - 1
+write_rds(n_topics, here("Outputs/06_n_topics.rds"))
+
 paragraphs_climate <- read_rds(here("Data/05_paragraphs_classified_wide_final.rds")) |>
-  filter(final_climate == TRUE)
+  filter(final_climate == TRUE) |> 
+  mutate(transcript_id = as.character(transcript_id))
 ```
 
 # Visualization Setup

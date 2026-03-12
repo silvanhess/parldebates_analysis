@@ -20,7 +20,7 @@ load_dot_env(here(".env"))
 # Import Data
 
 ```{r}
-paragraphs_cleaned <- read_rds(here("Data/02_paragraphs_cleaned.rds"))
+paragraphs_cleaned <- read_csv(here("Data/02_paragraphs_cleaned.csv"))
 ```
 
 # Create Handcoding Dataset

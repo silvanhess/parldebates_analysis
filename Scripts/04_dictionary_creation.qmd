@@ -25,7 +25,7 @@ load_dot_env(here(".env"))
 
 ```{r}
 labeled_dataset <- read_csv(here("labeled_dataset.csv"))
-paragraphs_cleaned <- read_rds(here("Data/02_paragraphs_cleaned.rds"))
+paragraphs_cleaned <- read_csv(here("Data/02_paragraphs_cleaned.csv"))
 ```
 
 # Process Labeled Data

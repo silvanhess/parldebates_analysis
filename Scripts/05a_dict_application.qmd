@@ -30,7 +30,7 @@ load_dot_env(here(".env"))
 ```{r}
 #| label: data-import
 
-paragraphs_cleaned <- read_rds(here("Data/02_paragraphs_cleaned.rds"))
+paragraphs_cleaned <- read_csv(here("Data/02_paragraphs_cleaned.csv"))
 french_dictionary_curated <- 
   read_csv(here("french_dictionary_curated.csv")) |>
   rename(keyword_original = keyword_french)

@@ -396,7 +396,7 @@ plot_categorical_distribution(
 # create long table (a paragraph can have more than one bsn assigned)
 paragraphs_subjects_long <- 
   left_join(
-    paragraphs_classified_dict,
+    paragraphs_cleaned,
     subjects |> select(IdSubject, BusinessShortNumber),
     by = join_by(IdSubject),
     relationship = "many-to-many"

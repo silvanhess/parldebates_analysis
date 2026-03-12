@@ -11,6 +11,7 @@ labeled_dataset.csv
 Scripts/.ipynb_checkpoints/
 Model-Outputs/
 *.csv
+Scripts-Rendered/
 
 # BERT-Finetuning/arc/
 # BERTopic/arc/
