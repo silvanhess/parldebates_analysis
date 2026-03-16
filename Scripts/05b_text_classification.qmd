@@ -58,7 +58,7 @@ classified_paragraphs_bert_cleaned <- classified_paragraphs_bert |>
   rename(paragraph_id = id)
 ```
 
-# Business-Level Climate Classification
+# Compare bert- and dict-based classification
 
 Compare the dictionary-based classification with the BERT-based classification. 
 
@@ -67,10 +67,11 @@ paragraphs_classified_joint <- paragraphs_classified_dict |>
   left_join(
     classified_paragraphs_bert_cleaned |> select(paragraph_id, predicted_label),
     by = join_by(paragraph_id)
-  ) |> 
-  mutate(
-    either_prediction = dict_prediction | predicted_label,
-    both_predictions = dict_prediction & predicted_label)
+  ) |>
+  drop_na(predicted_label)   
+  # mutate(
+  #   either_prediction = dict_prediction | predicted_label,
+  #   both_predictions = dict_prediction & predicted_label)
 ```
 
 Visualize the comparison results.
@@ -97,6 +98,31 @@ write_rds(p, here("Outputs/05_prediction_comparison.rds"))
 p
 ```
 
+# Transcript Classification
+
+```{r}
+# transcript_classification <- paragraphs_classified_joint |> 
+#   group_by(transcript_id) |>
+#   summarise(
+#     n_paragraphs = n(),
+#     n_climate_paragraphs = sum(predicted_label),
+#     proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
+#     climate_transcript = case_when(n_climate_paragraphs > 0 ~ TRUE,
+#     .default = FALSE),
+#     transcript_text = paste(paragraph_text, collapse = " "),
+#     transcript_word_length = str_count(transcript_text, "\\S+"),
+#     .groups = "drop"
+#   ) |> 
+#   filter(climate_transcript == TRUE, transcript_word_length >= 50)
+
+# write_csv(
+#   transcript_classification,
+#   here("Data/05_transcripts_climate.csv")
+# )
+```
+
+# Pre-Processing for Business Classification
+
 Do some preprocessing to prepare for final classification.
 
 ```{r}
@@ -116,27 +142,61 @@ paragraphs_classified_wide <- paragraphs_subjects_long |>
   group_by(across(c(-BusinessShortNumber, -Title))) |> 
   summarise(
     BusinessShortNumber = paste(BusinessShortNumber, collapse = " | "),
-    Title = paste(Title, collapse = " | ")
+    Title = paste(Title, collapse = " | "),
+    .groups = "drop"
   )
 ```
 
-A business is assigned a `climate_temp` label if at least 10% of its paragraphs match the dictionary or the paragraph references the climate dictionary explicitly. This threshold ensures that only businesses with substantive climate content are included. The threshold was determined by manually inspecting the distribution of the proportion of climate paragraphs across businesses and identifying a natural cutoff point that balances inclusivity with relevance.
+# Sensitivity Checks for Threshold Selection
 
 ```{r}
-#| label: business-classification
+# create variables with different thresholds for the proportion of climate paragraphs to be classified as climate relevant. This will be used for sensitivity checks later on.
 
-threshold <- 0.1
+# thresholds <- c(0.03, 0.05, 0.08, 0.1, 0.12, 0.15)
 
-business_classification <- paragraphs_classified_wide |> 
+business_classification <- paragraphs_classified_wide |>
   group_by(BusinessShortNumber, Title) |>
   summarise(
     n_paragraphs = n(),
     n_climate_paragraphs = sum(dict_prediction),
     proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
-    climate_temp = case_when(proportion_climate_paragraphs >= threshold ~ TRUE,
-    .default = FALSE),
+    threshold_03 = ifelse(proportion_climate_paragraphs >= 0.03, TRUE, FALSE),
+    threshold_05 = ifelse(proportion_climate_paragraphs >= 0.05, TRUE, FALSE),
+    threshold_08 = ifelse(proportion_climate_paragraphs >= 0.08, TRUE, FALSE),
+    threshold_10 = ifelse(proportion_climate_paragraphs >= 0.1, TRUE, FALSE),
+    threshold_12 = ifelse(proportion_climate_paragraphs >= 0.12, TRUE, FALSE),
+    threshold_15 = ifelse(proportion_climate_paragraphs >= 0.15, TRUE, FALSE),
     .groups = "drop"
   )
+
+# label the paragraphs table with each threshold
+# pseudo code:
+# when BusinesShortNumber in threshold_03 == TRUE then threshold_03_paragraph = TRUE else FALSE
+
+paragraphs_classified_sensitivity <- paragraphs_classified_wide |>
+  left_join(
+    business_classification |> select(BusinessShortNumber, starts_with("threshold")),
+    by = join_by(BusinessShortNumber)
+  ) |>
+  group_by(paragraph_id) |>
+  summarise(
+    across(starts_with("threshold"), ~ as.integer(any(. == TRUE))),
+    .groups = "drop"
+  ) |>
+  summarise(across(starts_with("threshold"), sum)) |>
+  pivot_longer(cols = everything(), names_to = "threshold", values_to = "n_paragraphs_classified")
+
+
+# plot the number of paragraphs for each threshold
+p <- ggplot(paragraphs_classified_sensitivity, aes(x = threshold, y = n_paragraphs_classified, fill = threshold)) +
+  geom_col() +
+  geom_text(aes(label = n_paragraphs_classified), vjust = 2.0) +
+  theme_minimal() +
+  labs(x = "Proportion of Climate Paragraphs Threshold", y = "Count of Climate Paragraphs") +
+  theme(legend.position = "none")
+ggsave(here("Outputs/05_threshold_counts.png"), p)
+write_rds(p, here("Outputs/05_threshold_counts.rds"))
+p
 ```
 
 Plot a histogram of the distribution of the proportion of climate paragraphs for all businesses.
@@ -158,6 +218,32 @@ ggsave(here("Outputs/05_proportion_climate_paragraphs_histogram.png"), p)
 write_rds(p, here("Outputs/05_proportion_climate_paragraphs_histogram.rds"))
 p
 ```
+
+# Temporary business classification
+
+A business is assigned a `climate_temp` label if at least 10% of its paragraphs match the dictionary or the paragraph references the climate dictionary explicitly. This threshold ensures that only businesses with substantive climate content are included. The threshold was determined by manually inspecting the distribution of the proportion of climate paragraphs across businesses and identifying a natural cutoff point that balances inclusivity with relevance.
+
+```{r}
+#| label: business-classification
+
+final_threshold <- 0.1
+
+business_classification <- paragraphs_classified_wide |> 
+  group_by(BusinessShortNumber, Title) |>
+  summarise(
+    n_paragraphs = n(),
+    n_climate_paragraphs = sum(dict_prediction),
+    proportion_climate_paragraphs = n_climate_paragraphs / n_paragraphs,
+    climate_temp = case_when(proportion_climate_paragraphs >= final_threshold ~ TRUE,
+    .default = FALSE),
+    large_bsn_check = case_when(n_climate_paragraphs > 1 & n_paragraphs >= 30 ~ TRUE,
+    .default = FALSE),
+    .groups = "drop"
+  )
+```
+
+
+# LLM Review
 
 In a next step, an LLM will be used to check the business Titles of climate_temp businesses and assign the final `climate` label. This is necessary to exclude false positives, i.e. businesses that contain some climate keywords but are not actually about climate topics.
 
@@ -331,6 +417,7 @@ business_classification_final |>
 
 Some medium-size businesses below the threshold with some climate relevance, but not enough to be classified as climate relevant. This weakness is acknowleged, but the threshold is necessary to ensure that the final climate classification is meaningful and not diluted by businesses with only marginal climate content.
 
+
 # Paragraph-Level Climate Classification
 
 Finally, the final climate label is assigned to the paragraphs table.
@@ -362,6 +449,8 @@ p <- plot_categorical_distribution(
 write_rds(p, here("Outputs/05_paragraphs_climate_distribution.rds"))
 p
 ```
+
+
 
 # Prepare Data for Topic Modeling
 
