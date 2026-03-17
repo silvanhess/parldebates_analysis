@@ -66,7 +66,8 @@ party_colors <- c(
 visualization_data <- paragraphs_classified_wide_final |>
   mutate(
     ParlGroupName = factor(ParlGroupName, levels = rev(parlgroup_order)),
-    party_abb = factor(ParlGroupName, levels = rev(parlgroup_order), labels = rev(partyabb_order))
+    party_abb = factor(ParlGroupName, levels = rev(parlgroup_order), labels = rev(partyabb_order)),
+    legislative_period = as.character(legislative_period)
     )# |>
   # group_by(IdSession) |> 
   # mutate(

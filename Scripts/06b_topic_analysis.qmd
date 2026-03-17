@@ -58,7 +58,10 @@ write_rds(n_topics, here("Outputs/06_n_topics.rds"))
 
 paragraphs_climate <- read_rds(here("Data/05_paragraphs_classified_wide_final.rds")) |>
   filter(final_climate == TRUE) |> 
-  mutate(transcript_id = as.character(transcript_id))
+  mutate(
+    transcript_id = as.character(transcript_id),
+    legislative_period = as.character(legislative_period)
+  )
 ```
 
 # Visualization Setup
@@ -211,6 +214,8 @@ Which businesses are most prevalent in each topic?
 Which climate keywords are most prevalent in each topic?
 
 ```{r}
+#| label: dict-keywords
+
 # top_keywords_per_topic <- 
   paragraphs_topics_wide |>
   filter(
@@ -248,11 +253,14 @@ Which climate keywords are most prevalent in each topic?
 What are the most representative documents for each topic?
 
 ```{r}
+#| label: doc-preview
+
 documents_with_topics |>
   group_by(topic_id) |> 
   arrange(desc(topic_probability)) |>
   slice_sample(n = 5) |> 
   select(topic_id, transcript_text) |> 
+  mutate(transcript_text = str_trunc(transcript_text, 200)) |> 
   datatable()
 ```
 
@@ -265,7 +273,7 @@ Party composition across all topics (stacked bar charts) based on word counts.
 
 df_plot <- paragraphs_topics_wide |>
   mutate(topic_id = factor(topic_id, levels = rev(sort(unique(topic_id))))) |> 
-  filter(topic_id %in% c("1", "2", "4", "5", "6")) |>
+  # filter(topic_id %in% c("1", "2", "4", "5", "6")) |>
   group_by(topic_id, party_abb) |>
   summarise(
     group_words = sum(paragraph_word_count),
@@ -311,7 +319,7 @@ y = share of party in topic
 x/y = over/under emphasis of topic by party compared to overall parliamentary presence
 
 ```{r}
-#| label: heatmap-party-topic
+#| label: boxplot-party-topic
 
 counts <- paragraphs_topics_wide |>
   # # topic 6 and 7 can be joined into one topic, as they are very similar and both have low representation
@@ -321,7 +329,7 @@ counts <- paragraphs_topics_wide |>
   #     .default = as.character(topic_id)
   #   )
   # ) |>
-  filter(topic_id %in% c("1", "2", "4", "5", "6")) |>
+  filter(topic_id %in% c("1", "2")) |>
   group_by(party_abb, topic_id) |>
   summarise(
     wordcount_party_topic = sum(paragraph_word_count),
@@ -393,6 +401,63 @@ p <-
 ggsave(here("Outputs/06_plot_topic_party_comparison.png"))
 write_rds(p, here("Outputs/06_plot_topic_party_comparison.rds"))
 p
+```
+
+## Regression Analysis
+
+```{r}
+#| label: regression-analysis-setup
+
+# create dummy variables for topics 1 to 7
+regression_data <- paragraphs_topics_wide |>
+  distinct(transcript_id, topic_id, party_abb) |>
+  mutate(
+    topic_1 = factor(ifelse(topic_id == 1, 1, 0)),
+    topic_2 = factor(ifelse(topic_id == 2, 1, 0)),
+    # topic_3 = factor(ifelse(topic_id == 3, 1, 0)),
+    # topic_4 = factor(ifelse(topic_id == 4, 1, 0)),
+    # topic_5 = factor(ifelse(topic_id == 5, 1, 0)),
+    # topic_6 = factor(ifelse(topic_id == 6, 1, 0)),
+    # topic_7 = factor(ifelse(topic_id == 7, 1, 0)),
+    party_abb = relevel(factor(party_abb), ref = "SP") # change according to hypothesis
+  )
+```
+
+What influence does party affiliation have on topic assignment?
+
+```{r}
+#| label: regression-analysis
+
+# logistic regression with topic 1 as dependent variable and party affiliation as independent variable
+# model_1 <- glm(
+#   topic_1 ~ party_abb,
+#   data = regression_data,
+#   family = binomial()
+# )
+# summary(model_1)
+
+# for loop over topics
+models <- list()
+for (i in 1:2) {
+  formula <- as.formula(paste0("topic_", i, " ~ party_abb"))
+  model <- glm(formula, data = regression_data, family = binomial())
+  models[[paste0("model_", i)]] <- model
+}
+
+# save models
+write_rds(models, here("Outputs/06_regression_models.rds"))
+
+# print summary of each model
+for (i in 1:2) {
+  cat(paste0("Model for Topic ", i, ":\n"))
+  print(summary(models[[paste0("model_", i)]]))
+  cat("\n\n")
+}
+
+# use stargazer to create a summary table of all models
+library(stargazer)
+stargazer(models, type = "text", title = "Logistic Regression Results", align = TRUE)
+
 ```
 
 # Compare Legislative Periods
