@@ -1,6 +1,8 @@
 ---
 title: "Text Classification"
-format: html
+format: 
+  html:
+    embed-resources: true
 execute:
   warning: false
 ---
@@ -408,7 +410,7 @@ Print non-climate businesses just below the threshold.
 
 ```{r}
 business_classification_final |> 
-  filter(final_climate == FALSE, proportion_climate_paragraphs < threshold) |>
+  filter(final_climate == FALSE, proportion_climate_paragraphs < final_threshold) |>
   distinct(Title, n_paragraphs, proportion_climate_paragraphs) |>
   arrange(desc(proportion_climate_paragraphs)) |>  
   slice_head(n = 10) |> 

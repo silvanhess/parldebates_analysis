@@ -1,6 +1,8 @@
 ---
 title: "Handcoding Data"
-format: html
+format: 
+  html:
+    embed-resources: true
 execute:
   warning: false
 ---
