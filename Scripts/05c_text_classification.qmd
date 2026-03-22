@@ -83,18 +83,27 @@ Show the dict prediction, the bert prediction and the overlap between the two pr
 ```{r}
 df_plot <- paragraphs_classified_joint |> 
   summarise(
-    Dictionary = sum(dict_prediction),
-    Transformer = sum(predicted_label),
-    Overlap = sum(dict_prediction & predicted_label)
+    `Dictionary-Based Classifications` = sum(dict_prediction),
+    `Transformer-Based Classifications` = sum(predicted_label),
+    `Overlapping Classifications` = sum(dict_prediction & predicted_label)
   ) |> 
   pivot_longer(cols = everything(), names_to = "Category", values_to = "Count")
 
-p <- ggplot(df_plot, aes(x = Category, y = Count, fill = Category)) +
-  geom_col() +
-  geom_text(aes(label = Count), vjust = 2.0) +
+p <- ggplot(
+  df_plot, aes(
+    x = Category, 
+    y = Count
+  )
+) +
+  geom_col(fill = "steelblue") +
+  # geom_text(aes(label = Count), vjust = 2.0, color = "black") +
   theme_minimal() +
-  labs(x = "Prediction Category", y = "Count") +
-  theme(legend.position = "none")
+  labs(x = NULL, y = "Number of Paragraphs") +
+  scale_y_continuous(labels = scales::label_number(big.mark = "'", decimal.mark = ".", accuracy = 1)) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 ggsave(here("Outputs/05_prediction_comparison.png"), p)
 write_rds(p, here("Outputs/05_prediction_comparison.rds"))
 p
@@ -133,7 +142,7 @@ Do some preprocessing to prepare for final classification.
 # Create long table: paragraphs can have more than one bsn assigned
 
 paragraphs_subjects_long <- left_join(
-  paragraphs_classified_dict,
+  paragraphs_classified_joint,
   subjects,
   by = join_by(IdSubject),
   relationship = "many-to-many"
@@ -175,27 +184,45 @@ business_classification <- paragraphs_classified_wide |>
 # pseudo code:
 # when BusinesShortNumber in threshold_03 == TRUE then threshold_03_paragraph = TRUE else FALSE
 
+#Replace the placeholder with code that joins thresholds on the long paragraph–BSN table, pivots thresholds, and counts distinct paragraphs and distinct paragraphs with predicted_label == TRUE:
+
 paragraphs_classified_sensitivity <- paragraphs_classified_wide |>
   left_join(
     business_classification |> select(BusinessShortNumber, starts_with("threshold")),
     by = join_by(BusinessShortNumber)
   ) |>
-  group_by(paragraph_id) |>
+  pivot_longer(cols = starts_with("threshold"), names_to = "threshold", values_to = "meets_threshold") |>
+  filter(meets_threshold == TRUE) |>
+  group_by(threshold) |>
   summarise(
-    across(starts_with("threshold"), ~ as.integer(any(. == TRUE))),
+    n_paragraphs_classified = n_distinct(paragraph_id),
+    n_paragraphs_predicted_label = n_distinct(paragraph_id[predicted_label == TRUE]),
     .groups = "drop"
   ) |>
-  summarise(across(starts_with("threshold"), sum)) |>
-  pivot_longer(cols = everything(), names_to = "threshold", values_to = "n_paragraphs_classified")
-
+  mutate(threshold = paste0(str_remove(threshold, "threshold_"), "%"))
 
 # plot the number of paragraphs for each threshold
-p <- ggplot(paragraphs_classified_sensitivity, aes(x = threshold, y = n_paragraphs_classified, fill = threshold)) +
+# Create a stacked bar by computing the "not predicted" count and pivoting to long form, then plot with fill by predicted status:
+
+p <- paragraphs_classified_sensitivity |>
+  mutate(n_paragraphs_not_predicted = n_paragraphs_classified - n_paragraphs_predicted_label) |>
+  pivot_longer(
+    cols = c(n_paragraphs_predicted_label, n_paragraphs_not_predicted),
+    names_to = "predicted",
+    values_to = "count"
+  ) |>
+  mutate(
+    predicted = recode(
+      predicted,
+      n_paragraphs_predicted_label = "Predicted (BERT)",
+      n_paragraphs_not_predicted = "Not Predicted")
+  ) |>
+  ggplot(aes(x = threshold, y = count, fill = predicted)) +
   geom_col() +
-  geom_text(aes(label = n_paragraphs_classified), vjust = 2.0) +
   theme_minimal() +
-  labs(x = "Proportion of Climate Paragraphs Threshold", y = "Count of Climate Paragraphs") +
-  theme(legend.position = "none")
+  scale_y_continuous(labels = scales::label_number(big.mark = "'", decimal.mark = ".", accuracy = 1)) +
+  labs(x = "Proportion of Climate Paragraphs Threshold", y = "Number of Paragraphs", fill = NULL) +
+  theme(legend.position = "right", axis.text.x = element_text(angle = 45, hjust = 1))
 ggsave(here("Outputs/05_threshold_counts.png"), p)
 write_rds(p, here("Outputs/05_threshold_counts.rds"))
 p
@@ -210,7 +237,7 @@ df_plot <- business_classification |>
   filter(proportion_climate_paragraphs >= 0.01 & proportion_climate_paragraphs <= 0.2)
 
 p <- ggplot(df_plot, aes(x = proportion_climate_paragraphs)) +
-  geom_histogram() +
+  geom_histogram(fill = "steelblue") +
   theme_minimal() +
   labs(
     x = "Proportion of Climate Paragraphs", 
@@ -332,18 +359,18 @@ summary_stats <- tibble(
   )
 )
 
-p <- ggplot(summary_stats, aes(x = category, y = count, fill = category)) +
-  geom_col() +
-  geom_text(aes(label = count), vjust = 1.5) +
+p <- ggplot(summary_stats, aes(x = category, y = count)) +
+  geom_col(fill = "steelblue") +
+  # geom_text(aes(label = count), vjust = 1.5, color = "white") +
   theme_minimal() +
-  labs(title = "Summary of Business Classifications", x = "Category", y = "Count") +
+  labs(x = NULL, y = "Number of Businesses") +
   theme(legend.position = "none")
 ggsave(here("Outputs/05_business_classification_summary.png"), p)
 write_rds(p, here("Outputs/05_business_classification_summary.rds"))
 p
 ```
 
-Plot the distribution of the number of pargraphs for final_climate.
+Plot the distribution of the number of paragraphs for final_climate.
 
 ```{r}
 df <- business_classification_final |> 
@@ -451,8 +478,6 @@ p <- plot_categorical_distribution(
 write_rds(p, here("Outputs/05_paragraphs_climate_distribution.rds"))
 p
 ```
-
-
 
 # Prepare Data for Topic Modeling
 

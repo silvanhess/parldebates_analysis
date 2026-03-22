@@ -324,13 +324,6 @@ x/y = over/under emphasis of topic by party compared to overall parliamentary pr
 #| label: boxplot-party-topic
 
 counts <- paragraphs_topics_wide |>
-  # # topic 6 and 7 can be joined into one topic, as they are very similar and both have low representation
-  # mutate(
-  #   topic_id = case_when(
-  #     topic_id %in% c(6,7) ~ "6/7",
-  #     .default = as.character(topic_id)
-  #   )
-  # ) |>
   filter(topic_id %in% c("1", "2")) |>
   group_by(party_abb, topic_id) |>
   summarise(
@@ -383,26 +376,96 @@ shares_long <- shares |>
     party_abb = fct_rev(factor(party_abb))
   )
 
-p <- 
-  ggplot(
-    shares_long, 
-    aes(
-      x = topic_id, 
-      y = topic_diff)
-  ) +
+labels_map <- setNames(as.character(levels(shares_long$topic_id)), levels(shares_long$topic_id))
+labels_map["1"] <- "Topic 1: \n Swiss Hydropower \n and Energy Strategy"
+labels_map["2"] <- "Topic 2: \n Climate Policy \n and Glacier Initiatives"
+  
+p <-  ggplot(
+  shares_long, 
+  aes(x = topic_id, y = topic_diff)
+) +
   geom_boxplot(outliers = FALSE) +
   geom_jitter(width = 0.3, height = 0.3, aes(shape = party_abb)) +
+  scale_x_discrete(labels = labels_map) +
   labs(
-    x = "Topic",
+    x = NULL,
     y = "Deviation from Party Speech Average (%)",
     shape = "Party"
   ) +
-  theme_minimal() #+
-  # theme(legend.position = "bottom", legend.direction = "horizontal")
-
+  theme_minimal() 
+  # theme(
+  #   axis.text.x = element_text(angle = 45, hjust = 1)
+  # )
 ggsave(here("Outputs/06_plot_topic_party_comparison.png"))
 write_rds(p, here("Outputs/06_plot_topic_party_comparison.rds"))
 p
+```
+
+# Statistical Analysis
+
+## Chi-Squared Test
+
+Test statistical association between party and topic.
+
+```{r}
+#| label: chi-squared-test
+
+df <- paragraphs_topics_wide |>
+  distinct(transcript_id, topic_id, party_abb) |>
+  mutate(
+    topic_1 = factor(ifelse(topic_id == "1", 1, 0)),
+    topic_2 = factor(ifelse(topic_id == "2", 1, 0)),
+    Grüne = factor(ifelse(party_abb == "Grüne", 1, 0)),
+    Mitte = factor(ifelse(party_abb == "Mitte", 1, 0)),
+    FDP = factor(ifelse(party_abb == "FDP", 1, 0)),
+    SVP = factor(ifelse(party_abb == "SVP", 1, 0)),
+    GLP = factor(ifelse(party_abb == "GLP", 1, 0)),
+    SP = factor(ifelse(party_abb == "SP", 1, 0))
+  )
+
+perform_chisq_test <- function(party) {
+  chisq_test_1 <- chisq.test(table(df[[party]], df$topic_1))
+  chisq_test_2 <- chisq.test(table(df[[party]], df$topic_2))
+  results <- tibble(
+    party = party,
+    topic = c("Topic 1", "Topic 2"),
+    statistic = c(chisq_test_1$statistic, chisq_test_2$statistic),
+    df = c(chisq_test_1$parameter, chisq_test_2$parameter),
+    p_value = c(chisq_test_1$p.value, chisq_test_2$p.value),
+  )
+  return(results)
+}
+
+chisq_test_results <- map_df(
+  distinct(df, party_abb) |> pull(party_abb),
+  perform_chisq_test
+  )  |> 
+  arrange(topic, party) |>
+  mutate(
+    statistic = round(statistic, 3),
+    p_value = paste0(
+    round(p_value, 3),
+    case_when(
+      p_value < 0.001 ~ "***",
+      p_value < 0.01  ~ "**",
+      p_value < 0.05  ~ "*",
+      TRUE ~ ""
+    )
+  )
+)
+
+write_rds(chisq_test_results, here("Outputs/06_chi_squared_results.rds"))
+
+library(knitr)
+chisq_test_results |> 
+  kable(
+    col.names = c("Party", "Topic", "χ²", "df", "p-value")
+  ) |> 
+  footnote(
+    general = "* p < 0.05, ** p < 0.01, *** p < 0.001",
+    general_title = "",
+    footnote_as_chunk = TRUE
+  )
 ```
 
 ## Regression Analysis
@@ -416,11 +479,11 @@ regression_data <- paragraphs_topics_wide |>
   mutate(
     topic_1 = factor(ifelse(topic_id == 1, 1, 0)),
     topic_2 = factor(ifelse(topic_id == 2, 1, 0)),
-    # topic_3 = factor(ifelse(topic_id == 3, 1, 0)),
-    # topic_4 = factor(ifelse(topic_id == 4, 1, 0)),
-    # topic_5 = factor(ifelse(topic_id == 5, 1, 0)),
-    # topic_6 = factor(ifelse(topic_id == 6, 1, 0)),
-    # topic_7 = factor(ifelse(topic_id == 7, 1, 0)),
+    topic_3 = factor(ifelse(topic_id == 3, 1, 0)),
+    topic_4 = factor(ifelse(topic_id == 4, 1, 0)),
+    topic_5 = factor(ifelse(topic_id == 5, 1, 0)),
+    topic_6 = factor(ifelse(topic_id == 6, 1, 0)),
+    topic_7 = factor(ifelse(topic_id == 7, 1, 0)),
     party_abb = relevel(factor(party_abb), ref = "SP") # change according to hypothesis
   )
 ```
@@ -429,14 +492,6 @@ What influence does party affiliation have on topic assignment?
 
 ```{r}
 #| label: regression-analysis
-
-# logistic regression with topic 1 as dependent variable and party affiliation as independent variable
-# model_1 <- glm(
-#   topic_1 ~ party_abb,
-#   data = regression_data,
-#   family = binomial()
-# )
-# summary(model_1)
 
 # for loop over topics
 models <- list()
@@ -459,7 +514,6 @@ for (i in 1:2) {
 # use stargazer to create a summary table of all models
 library(stargazer)
 stargazer(models, type = "text", title = "Logistic Regression Results", align = TRUE)
-
 ```
 
 # Compare Legislative Periods
