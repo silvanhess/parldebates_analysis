@@ -69,7 +69,8 @@ visualization_data <- paragraphs_classified_wide_final |>
   mutate(
     ParlGroupName = factor(ParlGroupName, levels = rev(parlgroup_order)),
     party_abb = factor(ParlGroupName, levels = rev(parlgroup_order), labels = rev(partyabb_order)),
-    legislative_period = as.character(legislative_period)
+    legislative_period = as.character(legislative_period),
+    year = as.double(format(as.Date(meeting_date), "%Y"))
     )# |>
   # group_by(IdSession) |> 
   # mutate(
@@ -116,38 +117,39 @@ shares <- counts |>
     clim_intensity_ratio = wordcount_party_clim / expected_clim_words
   )
 
-# Summary Statistics - By Legislative Period (time-variable)
-period_counts <- visualization_data |> 
-  group_by(legislative_period, party_abb) |>
+# Summary Statistics - By Year (time variable)
+year_counts <- visualization_data |> 
+  filter(year >= 2016, year <= 2024) |> # only complete years
+  group_by(year, party_abb) |>
   summarise(
     wordcount_party = sum(paragraph_word_count),
     wordcount_party_clim = sum(paragraph_word_count[final_climate == TRUE]),
     .groups = "drop"
   ) |>
-  group_by(legislative_period) |>
+  group_by(year) |>
   mutate(
-    period_wordcount = sum(wordcount_party),
-    period_wordcount_clim = sum(wordcount_party_clim)
+    year_wordcount = sum(wordcount_party),
+    year_wordcount_clim = sum(wordcount_party_clim)
   ) |>
   ungroup()
 
-period_shares <- period_counts |> 
+year_shares <- year_counts |> 
   mutate(
-    party_share_in_parl = wordcount_party / period_wordcount * 100,
-    party_share_in_clim = wordcount_party_clim / period_wordcount_clim * 100,
+    party_share_in_parl = wordcount_party / year_wordcount * 100,
+    party_share_in_clim = wordcount_party_clim / year_wordcount_clim * 100,
     clim_share_in_party = wordcount_party_clim / wordcount_party * 100,
-    avg_clim_share_in_period = period_wordcount_clim / period_wordcount * 100,
+    avg_clim_share_in_year = year_wordcount_clim / year_wordcount * 100,
     
     # Hypothetical climate words if each party had equal total size
     n_parties = n_distinct(party_abb),
-    hypothetical_party_size = period_wordcount / n_parties,
+    hypothetical_party_size = year_wordcount / n_parties,
     hypothetical_clim_words = hypothetical_party_size * (clim_share_in_party / 100),
     
     # Size-adjusted climate share
     size_adjusted_clim_share = hypothetical_clim_words / sum(hypothetical_clim_words) * 100,
     
     # Expected climate words if party spoke at parliament average rate
-    expected_clim_words = wordcount_party * (avg_clim_share_in_period / 100),
+    expected_clim_words = wordcount_party * (avg_clim_share_in_year / 100),
     
     # Ratio of actual to expected
     clim_intensity_ratio = wordcount_party_clim / expected_clim_words
@@ -181,9 +183,9 @@ write_rds(p, here("Outputs/05_plot_timeseries.rds"))
 p
 ```
 
-## Climate Discourse Across Parties
+# Climate Discourse Across Parties
 
-### Time-Fixed
+## Time-Fixed
 
 First Question: How much of each party's speech time do the parties devote to climate change? The grey line shows the parliament average at `r unique(shares$avg_clim_share_in_parl)`. In white are the percentages of climate speech in comparison to their total speech time.
 
@@ -226,20 +228,20 @@ shares_long <- shares |>
   ) |>
   mutate(
     measure = factor(measure, 
-                    levels = c("size_adjusted_clim_share", "party_share_in_clim"),
-                    labels = c("Size-Adjusted", "Actual"))
+      levels = c("size_adjusted_clim_share", "party_share_in_clim"),
+      labels = c("Size-Adjusted", "Actual"))
   )
 
 p <- shares_long |>
   ggplot(aes(x = percentage, y = measure, fill = party_abb)) +
   geom_col(position = "stack", width = 0.6) +
   geom_text(aes(label = ifelse(percentage > 3, 
-                                sprintf("%.1f%%", percentage), 
-                                "")),
-            position = position_stack(vjust = 0.5),
-            color = "white",
-            fontface = "bold",
-            size = 3.5) +
+    sprintf("%.1f%%", percentage), 
+    "")),
+    position = position_stack(vjust = 0.5),
+    color = "white",
+    fontface = "bold",
+    size = 3.5) +
   scale_fill_manual(values = party_colors) +
   labs(
     x = "Share of Words in Climate Debates (%)",
@@ -258,18 +260,18 @@ write_rds(p, here("Outputs/05_plot_climate_share_per_party.rds"))
 p
 ```
 
-### Time Variable
+## Time Variable
 
 Share of climate-related speeches per parliamentary group over time. This means disregarding the total word count of each party. Just looking at the share of one party divided by the total word count of the climate debate in that session, without accounting for the fact that some parties speak more than others.
 
 ```{r}
-p <- period_shares |> 
-  ggplot(aes(x = legislative_period, y = party_share_in_clim, color = party_abb)) +
+p <- year_shares |> 
+  ggplot(aes(x = year, y = party_share_in_clim, color = party_abb)) +
   geom_line(aes(group = party_abb), size = 1) +
   geom_point(size = 2) +
   scale_color_manual(values = party_colors) +
   labs(
-    x = "Legislative Period",
+    x = "Year",
     y = "Share of Party in Climate Debates(%)",
     color = "Party Group"
   ) +
@@ -288,44 +290,44 @@ How much of does a party contribute to the climate debate? This means how much o
 
 ```{r}
 # add the parliamentary average to the data and add it to the plot as a gry line
-df_plot <- period_shares |> 
-  group_by(legislative_period) |>
+df_plot <- year_shares |> 
+  group_by(year) |>
   mutate(parl_avg_clim_share = sum(wordcount_party_clim) / sum(wordcount_party) * 100) |>
   ungroup()
 
-avg_label <- df_plot |>
-  group_by(legislative_period) |>
-  summarise(parl_avg_clim_share = sum(wordcount_party_clim) / sum(wordcount_party) * 100) |>
-  slice_max(legislative_period, n = 1)  # grab last period for label placement
+# avg_label <- df_plot |>
+#   group_by(year) |>
+#   summarise(parl_avg_clim_share = sum(wordcount_party_clim) / sum(wordcount_party) * 100) |>
+#   slice_max(year, n = 1)  # grab last year for label placement
 
 p <- df_plot |>
-  ggplot(aes(x = legislative_period, y = clim_share_in_party, color = party_abb)) +
+  ggplot(aes(x = year, y = clim_share_in_party, color = party_abb)) +
   geom_line(aes(group = party_abb), size = 1) +
   geom_point(size = 2) +
   geom_line(aes(y = parl_avg_clim_share, group = 1), color = "gray50", linetype = "dashed", size = 1) +
-  geom_text(
-    data = avg_label,
-    aes(x = legislative_period, y = parl_avg_clim_share, label = "Parliament avg."),
-    color = "gray50",
-    hjust = -0.1,  # nudge right of the last point
-    vjust = 0.5,
-    size = 3.5,
-    inherit.aes = FALSE
-  ) +
+  # geom_text(
+  #   data = avg_label,
+  #   aes(x = year, y = parl_avg_clim_share, label = "Parliament avg."),
+  #   color = "gray50",
+  #   hjust = -0.1,  # nudge right of the last point
+  #   vjust = 0.5,
+  #   size = 3.5,
+  #   inherit.aes = FALSE
+  # ) +
   scale_color_manual(values = party_colors) +
-  coord_cartesian(clip = "off") +  # allows text to render outside plot area
+  # coord_cartesian(clip = "off") +  # allows text to render outside plot area
   labs(
-    x = "Legislative Period",
+    x = "Year",
     y = "Share of Climate-Related Speeches (%)",
-    color = "Party Group"
+    color = "Party"
   ) +
-  theme_minimal() +
-  theme(
-    legend.position = "right",
-    panel.grid.major.y = element_blank(),
-    panel.grid.minor.y = element_blank(),
-    plot.margin = margin(5, 60, 5, 5)  # extra right margin for the label
-  )
+  theme_minimal() #+
+  # theme(
+  #   legend.position = "right",
+  #   panel.grid.major.y = element_blank(),
+  #   panel.grid.minor.y = element_blank(),
+  #   plot.margin = margin(5, 60, 5, 5)  # extra right margin for the label
+  # )
 ggsave(here("Outputs/05_plot_partyshare_timeseries.png"))
 write_rds(p, here("Outputs/05_plot_partyshare_timeseries.rds"))
 p

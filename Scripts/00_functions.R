@@ -42,10 +42,9 @@ plot_word_count_distribution <- function(
   max_limit = 300,
   # vline_position = 256,
   # vline_label = "Max Tokens",
-  title = "Distribution of Paragraph Lengths",
   x_label = "Paragraph Length (in words)",
   y_label = "Number of Paragraphs",
-  fill_color = "#8DC6FF",
+  fill_color = "steelblue",
   output_path = NULL
 ) {
   require(ggplot2)
@@ -70,12 +69,12 @@ plot_word_count_distribution <- function(
     theme_minimal() +
     labs(
       x = x_label,
-      y = y_label,
-      title = title
+      y = y_label
     )
 
   if (!is.null(output_path)) {
     ggsave(here(output_path), plot = p)
+    write_rds(p, here(output_path %>% str_replace(".png", ".rds")))
   }
 
   return(p)
@@ -86,11 +85,10 @@ plot_word_count_distribution <- function(
 plot_categorical_distribution <- function(
   data,
   group_col,
-  title = "Distribution in Dataset",
   x_label = NULL,
   y_label = "Percentage of Paragraphs",
   label_suffix = "paragraphs",
-  fill_color = "#8DC6FF",
+  fill_color = "steelblue",
   text_color = "black",
   output_path = NULL
 ) {
@@ -117,18 +115,18 @@ plot_categorical_distribution <- function(
     scale_y_continuous(labels = scales::percent_format()) +
     labs(
       x = x_label,
-      y = y_label,
-      title = title
+      y = y_label
     ) +
-    theme_minimal() +
-    geom_text(
-      aes(label = paste(group_count, label_suffix)),
-      vjust = 1.5,
-      color = text_color
-    )
+    theme_minimal() #+
+  # geom_text(
+  #   aes(label = paste(group_count, label_suffix)),
+  #   vjust = 1.5,
+  #   color = text_color
+  # )
 
   if (!is.null(output_path)) {
     ggsave(here(output_path), plot = p)
+    write_rds(p, here(output_path %>% str_replace(".png", ".rds")))
   }
 
   return(p)

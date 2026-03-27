@@ -375,7 +375,6 @@ Plot paragraph length distribution:
 ```{r}
 plot_word_count_distribution(
   data = paragraphs_cleaned,
-  title = "Distribution of Paragraph Lengths in Complete Dataset",
   output_path = "Outputs/02_paragraphs_cleaned_text_length_distribution.png"
 )
 ```
@@ -387,7 +386,6 @@ plot_categorical_distribution(
   data = paragraphs_cleaned,
   group_col = "LanguageOfText",
   x_label = "Language of Paragraphs",
-  title = "Distribution of Languages in Complete Dataset",
   output_path = "Outputs/02_paragraphs_cleaned_language_distribution.png"
 )
 ```
@@ -420,13 +418,29 @@ paragraphs_subjects_summary <- paragraphs_subjects_long |>
   )
 ```
 
-Plot business tag distribution:
+Plot business type distribution:
 
 ```{r}
-plot_categorical_distribution(
-  data = paragraphs_subjects_long,
-  group_col = "BusinessTypeName",
-  x_label = NULL,
-  output_path = "Outputs/02_business_type_distribution.png"
-)
+df_grouped <- paragraphs_subjects_long |>
+  group_by(across(all_of("BusinessTypeName"))) |>
+  summarise(
+    group_count = n(),
+    pct = group_count / nrow(paragraphs_subjects_long),
+    .groups = "drop"
+  )
+
+p <- ggplot(df_grouped, aes(x = .data[["BusinessTypeName"]], y = pct)) +
+  geom_col(fill = "steelblue") +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(
+    x = NULL,
+    y = "Percentage of Paragraphs",
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+ggsave(here("Outputs/02_paragraphs_business_type_distribution.png"), p)
+write_rds(p, here("Outputs/02_paragraphs_business_type_distribution.rds"))
+p
 ```

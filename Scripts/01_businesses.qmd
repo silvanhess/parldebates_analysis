@@ -107,7 +107,7 @@ Here I do all the Cleaning of the business data frame and store it for later use
 
 ## Business Types
 
-Here i filter **out** business types that have debates in the parliament. These are the following:
+Below i filter **out** business types that don't have debates in the parliament. These are the following:
 
 ```{r}
 businesses |> 
@@ -117,7 +117,7 @@ businesses |>
 
 ## Business Status
 
-Here I filter **for** business statuses that with a high cchance already had a dabeate in the parliament. These are the following:
+Below I filter **for** business statuses that with a high chance already had a debate in the parliament. These are the following:
 
 ```{r}
 businesses |> 

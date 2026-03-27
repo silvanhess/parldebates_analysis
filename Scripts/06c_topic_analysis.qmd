@@ -62,7 +62,12 @@ paragraphs_climate <- read_rds(here("Data/05_paragraphs_classified_wide_final.rd
   filter(final_climate == TRUE) |> 
   mutate(
     transcript_id = as.character(transcript_id),
-    legislative_period = as.character(legislative_period)
+    legislative_period = case_when(
+      legislative_period == "50" ~ "50th (2015-2019)",
+      legislative_period == "51" ~ "51st (2020-2023)",
+      legislative_period == "52" ~ "52nd (2024-2027)",
+      .default = as.character(legislative_period)
+    )
   )
 ```
 
@@ -325,6 +330,7 @@ x/y = over/under emphasis of topic by party compared to overall parliamentary pr
 
 counts <- paragraphs_topics_wide |>
   filter(topic_id %in% c("1", "2")) |>
+  # filter(topic_id %in% c("3", "4", "5", "6", "7")) |>
   group_by(party_abb, topic_id) |>
   summarise(
     wordcount_party_topic = sum(paragraph_word_count),
@@ -398,6 +404,8 @@ p <-  ggplot(
   # )
 ggsave(here("Outputs/06_plot_topic_party_comparison.png"))
 write_rds(p, here("Outputs/06_plot_topic_party_comparison.rds"))
+# ggsave(here("Outputs/06_plot_topics_3_to_7_party_emphasis.png"))
+# write_rds(p, here("Outputs/06_plot_topics_3_to_7_party_emphasis.rds"))
 p
 ```
 
@@ -436,6 +444,9 @@ perform_chisq_test <- function(party) {
   return(results)
 }
 
+n_parties <- n_distinct(df$party_abb)
+sig_adj <- 0.05 / (n_parties * 2) # Bonferroni correction for multiple tests
+
 chisq_test_results <- map_df(
   distinct(df, party_abb) |> pull(party_abb),
   perform_chisq_test
@@ -446,9 +457,9 @@ chisq_test_results <- map_df(
     p_value = paste0(
     round(p_value, 3),
     case_when(
-      p_value < 0.001 ~ "***",
-      p_value < 0.01  ~ "**",
-      p_value < 0.05  ~ "*",
+      p_value < sig_adj ~ "***",
+      p_value < 0.01 ~ "**",
+      p_value < 0.05 ~ "*",
       TRUE ~ ""
     )
   )
@@ -457,12 +468,13 @@ chisq_test_results <- map_df(
 write_rds(chisq_test_results, here("Outputs/06_chi_squared_results.rds"))
 
 library(knitr)
+library(kableExtra)
 chisq_test_results |> 
   kable(
     col.names = c("Party", "Topic", "χ²", "df", "p-value")
   ) |> 
   footnote(
-    general = "* p < 0.05, ** p < 0.01, *** p < 0.001",
+    general = "* p < 0.05, ** p < 0.01, *** p < 0.005 (Bonferroni-adjusted)",
     general_title = "",
     footnote_as_chunk = TRUE
   )
@@ -588,7 +600,7 @@ plots <- map(unique(shares_long$topic_id), function(topic) {
     geom_jitter(width = 0.2, height = 0, aes(shape = party_abb)) +
     labs(
       x = "Legislative Period",
-      y = "Difference from Parliament (%)",
+      y = "Deviation from Average (%)",
       shape = "Party"
     ) +
     theme_minimal()
