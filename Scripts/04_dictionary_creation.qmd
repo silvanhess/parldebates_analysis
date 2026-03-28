@@ -60,7 +60,6 @@ Plot paragraph length distribution.
 ```{r}
 plot_word_count_distribution(
   data = labeled_dataset_cleaned,
-  title = "Distribution of Paragraph Lengths in Labeled Paragraphs",
   output_path = "Outputs/04_labeled_paragraphs_text_length_distribution.png"
 )
 ```
@@ -71,7 +70,6 @@ Plot language distribution.
 plot_categorical_distribution(
   data = labeled_dataset_cleaned,
   group_col = "LanguageOfText",
-  title = "Distribution of Languages in Labeled Paragraphs",
   x_label = "Language of Paragraphs",
   output_path = "Outputs/04_labeled_paragraphs_language_distribution.png"
 )
@@ -84,7 +82,6 @@ plot_categorical_distribution(
   data = labeled_dataset_cleaned,
   group_col = "business_tag_climate",
   x_label = "Energy, Transport or Environment Related Business",
-  title = "Distribution of Business Tags in Labeled Paragraphs",
   output_path = "Outputs/04_labeled_paragraphs_business_tags_distribution.png"
 )
 ```
@@ -96,7 +93,6 @@ plot_categorical_distribution(
   data = labeled_dataset_cleaned,
   group_col = "climate",
   x_label = "Climate Paragraph",
-  title = "Distribution of Climate-Related Paragraphs \n in Labeled Dataset",
   output_path = "Outputs/04_labeled_paragraphs_class_distribution.png"
 )
 ```

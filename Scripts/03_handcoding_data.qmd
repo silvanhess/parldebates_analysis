@@ -57,7 +57,6 @@ Plot paragraph length distribution.
 ```{r}
 plot_word_count_distribution(
   data = handcoding_dataset,
-  title = "Distribution of Paragraph Lengths in Handcoding Dataset",
   output_path = "Outputs/03_handcoding_dataset_text_length_distribution.png"
 )
 ```
@@ -69,7 +68,7 @@ plot_categorical_distribution(
   data = handcoding_dataset,
   group_col = "LanguageOfText",
   x_label = "Language of Paragraphs",
-  title = "Distribution of Languages in Handcoding Dataset",
+  # title = "Distribution of Languages in Handcoding Dataset",
   output_path = "Outputs/03_handcoding_dataset_language_distribution.png"
 )
 ```
@@ -81,7 +80,7 @@ plot_categorical_distribution(
   data = handcoding_dataset,
   group_col = "business_tag_climate",
   x_label = "Energy, Transport or Environment Related Business",
-  title = "Distribution of Business Tags in Handcoding Dataset",
+  # title = "Distribution of Business Tags in Handcoding Dataset",
   output_path = "Outputs/03_handcoding_dataset_business_tags_distribution.png"
 )
 ```

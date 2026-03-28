@@ -45,7 +45,7 @@ parlgroup_order <- c(
 
 partyabb_order <- c(
   "SP",
-  "Grüne",
+  "GPS",
   "Mitte",
   "GLP",
   "FDP",
@@ -54,7 +54,7 @@ partyabb_order <- c(
 
 party_colors <- c(
   "SP" = "#E4032E",
-  "Grüne" = "#84B547",
+  "GPS" = "#84B547",
   "Mitte" = "#FF8C00",
   "GLP" = "#650959ff",
   "FDP" = "#0571C1",

@@ -89,7 +89,7 @@ parlgroup_order <- c(
 
 partyabb_order <- c(
   "SP",
-  "Grüne",
+  "GPS",
   "Mitte",
   "GLP",
   "FDP",
@@ -98,7 +98,7 @@ partyabb_order <- c(
 
 party_colors <- c(
   "SP" = "#E4032E",
-  "Grüne" = "#84B547",
+  "GPS" = "#84B547",
   "Mitte" = "#FF8C00",
   "GLP" = "#650959ff",
   "FDP" = "#0571C1",
@@ -423,7 +423,7 @@ df <- paragraphs_topics_wide |>
   mutate(
     topic_1 = factor(ifelse(topic_id == "1", 1, 0)),
     topic_2 = factor(ifelse(topic_id == "2", 1, 0)),
-    Grüne = factor(ifelse(party_abb == "Grüne", 1, 0)),
+    GPS = factor(ifelse(party_abb == "GPS", 1, 0)),
     Mitte = factor(ifelse(party_abb == "Mitte", 1, 0)),
     FDP = factor(ifelse(party_abb == "FDP", 1, 0)),
     SVP = factor(ifelse(party_abb == "SVP", 1, 0)),

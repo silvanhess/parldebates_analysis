@@ -380,7 +380,7 @@ ggplot(df, aes(x = n_paragraphs)) +
 geom_histogram() +
 theme_minimal() +
 labs(
-  title = "Distribution of Number of Paragraphs for Final Climate Businesses", 
+  # title = "Distribution of Number of Paragraphs for Final Climate Businesses", 
   x = "Number of Paragraphs", 
   y = "Count"
 )
@@ -472,7 +472,7 @@ p <- plot_categorical_distribution(
   paragraphs_classified_wide_final,
   group_col = "final_climate",
   x_label = "Climate Relevant Paragraph",
-  title = "Distribution of Climate Relevant Paragraphs",
+  # title = "Distribution of Climate Relevant Paragraphs",
   output_path = "Outputs/05_paragraphs_climate_distribution.png"
 )
 write_rds(p, here("Outputs/05_paragraphs_climate_distribution.rds"))
